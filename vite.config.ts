@@ -16,6 +16,12 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/api\/openai/, ''),
         secure: true,
       },
+      '/api/kimi': {
+        target: 'https://api.moonshot.ai',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/kimi/, ''),
+        secure: true,
+      },
       '/api/twelve': {
         target: 'https://api.twelvedata.com',
         changeOrigin: true,

@@ -2,7 +2,7 @@ import { useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ImageIcon, Zap, Upload, TrendingUp, TrendingDown, Minus, Target, Shield, ChevronDown, ChevronUp, RefreshCw, Brain } from 'lucide-react';
 import { useStore } from '@/store/useStore';
-import { openaiPost } from '@/lib/openai';
+import { kimiVisionPost } from '@/lib/openai';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -77,21 +77,8 @@ Responde ÚNICAMENTE en este JSON (sin texto adicional):
 }`;
 
   try {
-    const data = await openaiPost({
-      model: 'meta-llama/llama-4-scout-17b-16e-instruct',
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'text', text: prompt },
-          { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64Image}`, detail: 'high' } },
-        ],
-      }],
-      temperature: 0.2,
-      max_tokens: 2000,
-      response_format: { type: 'json_object' },
-    }, 60000);
-
-    if (!data?.choices?.[0]?.message?.content) throw new Error('Respuesta inválida de OpenAI');
+    const data = await kimiVisionPost(base64Image, prompt, 60000);
+    if (!data?.choices?.[0]?.message?.content) throw new Error('Respuesta inválida');
     return JSON.parse(data.choices[0].message.content);
 
   } catch (error: any) {

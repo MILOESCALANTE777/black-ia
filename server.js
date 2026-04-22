@@ -40,7 +40,7 @@ app.get('/api/yahoo/chart/:symbol', (req, res) => {
 
 // ─── API Proxy routes ─────────────────────────────────────────────────────────
 
-// Groq proxy (reemplaza OpenAI - gratis)
+// Groq proxy (chat, análisis de texto - gratis)
 app.use('/api/openai', createProxyMiddleware({
   target: 'https://api.groq.com',
   changeOrigin: true,
@@ -49,6 +49,19 @@ app.use('/api/openai', createProxyMiddleware({
     error: (err, req, res) => {
       console.error('[Groq proxy error]', err.message);
       res.status(502).json({ error: 'Groq proxy error', message: err.message });
+    },
+  },
+}));
+
+// Kimi proxy (análisis de imágenes con visión)
+app.use('/api/kimi', createProxyMiddleware({
+  target: 'https://api.moonshot.ai',
+  changeOrigin: true,
+  pathRewrite: { '^/api/kimi': '' },
+  on: {
+    error: (err, req, res) => {
+      console.error('[Kimi proxy error]', err.message);
+      res.status(502).json({ error: 'Kimi proxy error', message: err.message });
     },
   },
 }));
