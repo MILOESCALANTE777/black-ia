@@ -1,23 +1,19 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { TrendingUp, TrendingDown, RefreshCw, Clock, Zap, AlertTriangle, ChevronDown, ChevronUp, Activity, BarChart2, Trash2, History, CheckCircle, XCircle, Timer } from 'lucide-react';
+import { TrendingUp, TrendingDown, RefreshCw, ChevronDown, ChevronUp, Activity, BarChart2, Newspaper } from 'lucide-react';
 import { runQuantAnalysis, type QuantAnalysis, type LogAnomalySignal, type NewsImpact, loadSignalHistory, clearSignalHistory, type StoredSignal } from '@/lib/quantModel';
 
-// ─── Signal status logic ──────────────────────────────────────────────────────
-// Determines if a signal is ACTIVE, TP_HIT, SL_HIT, or EXPIRED based on current price
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 type SignalStatus = 'ACTIVE' | 'TP_HIT' | 'SL_HIT' | 'EXPIRED' | 'PENDING';
 
 function getSignalStatus(sig: LogAnomalySignal, currentPrice: number): SignalStatus {
   if (sig.direction === 'NONE') return 'EXPIRED';
   if (!currentPrice || currentPrice <= 0) return 'PENDING';
-
-  const { direction, entryPrice, stopLoss, takeProfit } = sig;
-
+  const { direction, stopLoss, takeProfit } = sig;
   if (direction === 'LONG') {
     if (currentPrice >= takeProfit) return 'TP_HIT';
     if (currentPrice <= stopLoss) return 'SL_HIT';
-    // Active if price is between SL and TP and hasn't moved too far from entry
     if (currentPrice > stopLoss && currentPrice < takeProfit) return 'ACTIVE';
   }
   if (direction === 'SHORT') {
@@ -28,26 +24,6 @@ function getSignalStatus(sig: LogAnomalySignal, currentPrice: number): SignalSta
   return 'EXPIRED';
 }
 
-function StatusBadge({ status }: { status: SignalStatus }) {
-  const config = {
-    ACTIVE:  { label: '● ACTIVA',   color: '#34C759', bg: '#34C75920', pulse: true  },
-    TP_HIT:  { label: '✓ TP',       color: '#34C759', bg: '#34C75915', pulse: false },
-    SL_HIT:  { label: '✗ SL',       color: '#FF3B30', bg: '#FF3B3015', pulse: false },
-    EXPIRED: { label: 'CERRADA',    color: '#636366', bg: '#2C2C2E',   pulse: false },
-    PENDING: { label: 'PENDIENTE',  color: '#FF9500', bg: '#FF950015', pulse: false },
-  }[status];
-
-  return (
-    <span className="flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full"
-      style={{ color: config.color, background: config.bg }}>
-      {config.pulse && <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: config.color }} />}
-      {config.label}
-    </span>
-  );
-}
-
-// ─── Countdown hook ───────────────────────────────────────────────────────────
-
 function useCountdown(targetSeconds: number) {
   const [secs, setSecs] = useState(targetSeconds);
   useEffect(() => {
@@ -55,144 +31,113 @@ function useCountdown(targetSeconds: number) {
     const t = setInterval(() => setSecs(s => Math.max(0, s - 1)), 1000);
     return () => clearInterval(t);
   }, [targetSeconds]);
-  const m = Math.floor(secs / 60);
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
   const s = secs % 60;
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  if (h > 0) return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 }
 
 const QUANT_ASSETS = [
-  { symbol: 'SPX',     name: 'S&P 500',    color: '#007AFF' },
-  { symbol: 'DJI',     name: 'Dow Jones',  color: '#34C759' },
-  { symbol: 'NDX',     name: 'Nasdaq',     color: '#AF52DE' },
-  { symbol: 'XAU/USD', name: 'Oro',        color: '#FF9500' },
-  { symbol: 'BTC/USD', name: 'Bitcoin',    color: '#F7931A' },
-  { symbol: 'ETH/USD', name: 'Ethereum',   color: '#627EEA' },
-  { symbol: 'EUR/USD', name: 'EUR/USD',    color: '#34C759' },
-  { symbol: 'GBP/USD', name: 'GBP/USD',   color: '#8E8E93' },
-  { symbol: 'USD/JPY', name: 'USD/JPY',   color: '#FF3B30' },
+  { symbol: 'SPX',     name: 'S&P 500',   color: '#007AFF' },
+  { symbol: 'DJI',     name: 'Dow Jones', color: '#34C759' },
+  { symbol: 'NDX',     name: 'Nasdaq',    color: '#AF52DE' },
+  { symbol: 'XAU/USD', name: 'Oro',       color: '#FF9500' },
+  { symbol: 'BTC/USD', name: 'Bitcoin',   color: '#F7931A' },
+  { symbol: 'ETH/USD', name: 'Ethereum',  color: '#627EEA' },
+  { symbol: 'EUR/USD', name: 'EUR/USD',   color: '#34C759' },
+  { symbol: 'GBP/USD', name: 'GBP/USD',  color: '#8E8E93' },
+  { symbol: 'USD/JPY', name: 'USD/JPY',  color: '#FF3B30' },
 ];
 
-function ZScoreBar({ zScore, threshold = 2.5 }: { zScore: number; threshold?: number }) {
-  const pct = Math.min(100, (Math.abs(zScore) / (threshold * 2)) * 100);
-  const color = zScore > threshold ? '#FF3B30' : zScore < -threshold ? '#34C759' : '#FF9500';
-  const isAnomaly = Math.abs(zScore) >= threshold;
-  return (
-    <div className="flex items-center gap-2">
-      <div className="flex-1 h-2 bg-[#2C2C2E] rounded-full overflow-hidden relative">
-        <div className="absolute top-0 bottom-0 w-px bg-[#636366]" style={{ left: '50%' }} />
-        {zScore >= 0 ? (
-          <motion.div initial={{ width: 0 }} animate={{ width: `${pct / 2}%` }} transition={{ duration: 0.6 }}
-            className="absolute top-0 bottom-0 rounded-full" style={{ left: '50%', background: color }} />
-        ) : (
-          <motion.div initial={{ width: 0 }} animate={{ width: `${pct / 2}%` }} transition={{ duration: 0.6 }}
-            className="absolute top-0 bottom-0 rounded-full" style={{ right: '50%', background: color }} />
-        )}
-      </div>
-      <span className="text-xs font-mono font-bold w-14 text-right" style={{ color: isAnomaly ? color : '#8E8E93' }}>
-        {zScore >= 0 ? '+' : ''}{zScore.toFixed(2)}σ
-      </span>
-    </div>
-  );
-}
+const TF_MINUTES: Record<string, number> = { '15min': 15, '1h': 60, '4h': 240 };
 
-function SignalRow({ sig, isLatest, isHistorical, currentPrice }: { sig: LogAnomalySignal; isLatest?: boolean; isHistorical?: boolean; currentPrice?: number }) {
+// ─── Signal Card minimalista ──────────────────────────────────────────────────
+
+function SignalCard({ sig, currentPrice, isLatest }: { sig: LogAnomalySignal; currentPrice?: number; isLatest?: boolean }) {
   const [open, setOpen] = useState(isLatest || false);
-  const dirColor = sig.direction === 'LONG' ? '#34C759' : sig.direction === 'SHORT' ? '#FF3B30' : '#636366';
-  const strengthPct = Math.round(sig.signalStrength * 100);
+  const dir = sig.direction;
+  const color = dir === 'LONG' ? '#34C759' : dir === 'SHORT' ? '#FF3B30' : '#636366';
   const status = currentPrice ? getSignalStatus(sig, currentPrice) : 'PENDING';
-  const isActive = status === 'ACTIVE';
+  const strength = Math.round(sig.signalStrength * 100);
+
+  const statusLabel: Record<SignalStatus, string> = {
+    ACTIVE: 'Activa', TP_HIT: 'TP ✓', SL_HIT: 'SL ✗', EXPIRED: 'Cerrada', PENDING: 'Pendiente',
+  };
+  const statusColor: Record<SignalStatus, string> = {
+    ACTIVE: '#34C759', TP_HIT: '#34C759', SL_HIT: '#FF3B30', EXPIRED: '#636366', PENDING: '#FF9500',
+  };
 
   return (
-    <div className="rounded-2xl overflow-hidden cursor-pointer"
-      style={{
-        background: isHistorical ? '#161616' : '#1C1C1E',
-        border: `1px solid ${isActive ? dirColor + '60' : isLatest ? dirColor + '40' : isHistorical ? '#2C2C2E' : '#38383A'}`,
-        opacity: (status === 'SL_HIT' || status === 'EXPIRED') && isHistorical ? 0.5 : 1,
-      }}
-      onClick={() => setOpen(!open)}>
-      <div className="flex items-center gap-3 px-4 py-3">
-        <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 relative"
-          style={{ background: dirColor + '15' }}>
-          {sig.direction === 'LONG' ? <TrendingUp size={16} color={dirColor} /> :
-           sig.direction === 'SHORT' ? <TrendingDown size={16} color={dirColor} /> :
-           <Activity size={16} color={dirColor} />}
-          {isActive && (
+    <div onClick={() => setOpen(!open)} className="rounded-2xl cursor-pointer transition-all"
+      style={{ background: '#1C1C1E', border: `1px solid ${status === 'ACTIVE' ? color + '50' : '#2C2C2E'}` }}>
+      <div className="flex items-center gap-3 px-4 py-3.5">
+        {/* Dirección */}
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 relative"
+          style={{ background: color + '15' }}>
+          {dir === 'LONG' ? <TrendingUp size={18} color={color} /> : <TrendingDown size={18} color={color} />}
+          {status === 'ACTIVE' && (
             <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full border-2 border-black animate-pulse"
-              style={{ background: dirColor }} />
+              style={{ background: color }} />
           )}
         </div>
+
+        {/* Info */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-sm font-bold" style={{ color: dirColor }}>{sig.direction}</span>
-            <StatusBadge status={status} />
-            {isLatest && !isHistorical && <span className="text-xs px-1.5 py-0.5 rounded font-bold" style={{ background: '#AF52DE20', color: '#AF52DE' }}>ÚLTIMA</span>}
-            {isHistorical && <span className="text-xs px-1.5 py-0.5 rounded font-bold" style={{ background: '#2C2C2E', color: '#636366' }}>HIST</span>}
-            {sig.isSignificant99 && <span className="text-xs px-1.5 py-0.5 rounded font-bold" style={{ background: '#34C75920', color: '#34C759' }}>99%</span>}
-            {sig.isSignificant && !sig.isSignificant99 && <span className="text-xs px-1.5 py-0.5 rounded font-bold" style={{ background: '#FF950020', color: '#FF9500' }}>95%</span>}
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-bold" style={{ color }}>{dir}</span>
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-full"
+              style={{ color: statusColor[status], background: statusColor[status] + '15' }}>
+              {statusLabel[status]}
+            </span>
           </div>
-          <div className="text-xs text-[#636366] mt-0.5">{sig.timestamp}</div>
+          <span className="text-xs text-[#636366]">{sig.timestamp}</span>
         </div>
+
+        {/* Fuerza */}
         <div className="text-right shrink-0">
-          <div className="text-xs font-bold" style={{ color: dirColor }}>{strengthPct}%</div>
-          <div className="text-xs text-[#636366]">fuerza</div>
+          <div className="text-sm font-bold" style={{ color }}>{strength}%</div>
+          <div className="text-xs text-[#636366]">{sig.zScore >= 0 ? '+' : ''}{sig.zScore.toFixed(1)}σ</div>
         </div>
         {open ? <ChevronUp size={14} color="#636366" /> : <ChevronDown size={14} color="#636366" />}
       </div>
+
       <AnimatePresence>
         {open && (
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }}>
-            <div className="px-4 pb-4 border-t border-[#38383A] pt-3 space-y-3">
-              <ZScoreBar zScore={sig.zScore} />
-              {/* Price progress bar vs entry */}
-              {currentPrice && sig.direction !== 'NONE' && (
-                <div>
-                  <div className="flex justify-between text-xs text-[#636366] mb-1">
-                    <span>SL {sig.stopLoss.toLocaleString()}</span>
-                    <span className="font-bold" style={{ color: isActive ? dirColor : '#636366' }}>
-                      Precio actual: {currentPrice.toLocaleString()}
-                    </span>
-                    <span>TP {sig.takeProfit.toLocaleString()}</span>
-                  </div>
-                  <div className="h-2 rounded-full overflow-hidden" style={{ background: '#2C2C2E' }}>
-                    {(() => {
-                      const range = Math.abs(sig.takeProfit - sig.stopLoss);
-                      const pos = sig.direction === 'LONG'
-                        ? Math.min(100, Math.max(0, ((currentPrice - sig.stopLoss) / range) * 100))
-                        : Math.min(100, Math.max(0, ((sig.stopLoss - currentPrice) / range) * 100));
-                      return (
-                        <div className="h-full rounded-full transition-all duration-500"
-                          style={{ width: `${pos}%`, background: status === 'TP_HIT' ? '#34C759' : status === 'SL_HIT' ? '#FF3B30' : dirColor }} />
-                      );
-                    })()}
-                  </div>
+            <div className="px-4 pb-4 pt-1 border-t border-[#2C2C2E] space-y-3">
+              {/* Niveles */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="p-2.5 rounded-xl text-center" style={{ background: '#2C2C2E' }}>
+                  <div className="text-xs text-[#636366] mb-0.5">Entrada</div>
+                  <div className="text-xs font-bold text-white">{sig.entryPrice.toLocaleString()}</div>
                 </div>
-              )}
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="p-2 rounded-xl" style={{ background: '#2C2C2E' }}>
-                  <span className="text-[#636366] block mb-0.5">Log Return</span>
-                  <span className="font-mono font-bold text-white">{sig.logReturn >= 0 ? '+' : ''}{sig.logReturn.toFixed(6)}</span>
+                <div className="p-2.5 rounded-xl text-center" style={{ background: 'rgba(255,59,48,0.1)' }}>
+                  <div className="text-xs text-[#FF3B30] mb-0.5">Stop</div>
+                  <div className="text-xs font-bold text-[#FF3B30]">{sig.stopLoss.toLocaleString()}</div>
                 </div>
-                <div className="p-2 rounded-xl" style={{ background: '#2C2C2E' }}>
-                  <span className="text-[#636366] block mb-0.5">p-value</span>
-                  <span className="font-mono font-bold" style={{ color: sig.isSignificant99 ? '#34C759' : sig.isSignificant ? '#FF9500' : '#8E8E93' }}>
-                    {sig.pValue.toFixed(5)}
-                  </span>
+                <div className="p-2.5 rounded-xl text-center" style={{ background: 'rgba(52,199,89,0.1)' }}>
+                  <div className="text-xs text-[#34C759] mb-0.5">Target</div>
+                  <div className="text-xs font-bold text-[#34C759]">{sig.takeProfit.toLocaleString()}</div>
                 </div>
               </div>
-              {sig.direction !== 'NONE' && (
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="p-2 rounded-xl text-center" style={{ background: '#2C2C2E' }}>
-                    <span className="text-xs text-[#636366] block">Entrada</span>
-                    <span className="text-xs font-bold text-white">{sig.entryPrice.toLocaleString()}</span>
+              {/* Barra de progreso */}
+              {currentPrice && dir !== 'NONE' && (
+                <div>
+                  <div className="flex justify-between text-xs text-[#636366] mb-1">
+                    <span>SL</span>
+                    <span style={{ color: statusColor[status] }}>Precio: {currentPrice.toLocaleString()}</span>
+                    <span>TP</span>
                   </div>
-                  <div className="p-2 rounded-xl text-center" style={{ background: 'rgba(255,59,48,0.1)' }}>
-                    <span className="text-xs text-[#FF3B30] block">SL 1.5xATR</span>
-                    <span className="text-xs font-bold text-[#FF3B30]">{sig.stopLoss.toLocaleString()}</span>
-                  </div>
-                  <div className="p-2 rounded-xl text-center" style={{ background: 'rgba(52,199,89,0.1)' }}>
-                    <span className="text-xs text-[#34C759] block">TP Media</span>
-                    <span className="text-xs font-bold text-[#34C759]">{sig.takeProfit.toLocaleString()}</span>
+                  <div className="h-1.5 rounded-full overflow-hidden" style={{ background: '#2C2C2E' }}>
+                    {(() => {
+                      const range = Math.abs(sig.takeProfit - sig.stopLoss);
+                      const pos = dir === 'LONG'
+                        ? Math.min(100, Math.max(0, ((currentPrice - sig.stopLoss) / range) * 100))
+                        : Math.min(100, Math.max(0, ((sig.stopLoss - currentPrice) / range) * 100));
+                      return <div className="h-full rounded-full" style={{ width: `${pos}%`, background: statusColor[status] }} />;
+                    })()}
                   </div>
                 </div>
               )}
@@ -204,35 +149,28 @@ function SignalRow({ sig, isLatest, isHistorical, currentPrice }: { sig: LogAnom
   );
 }
 
+// ─── News Card minimalista ────────────────────────────────────────────────────
+
 function NewsCard({ news }: { news: NewsImpact }) {
   const [open, setOpen] = useState(false);
-  const ic = news.impact === 'bullish' ? '#34C759' : news.impact === 'bearish' ? '#FF3B30' : '#FF9500';
-  const label = news.impact === 'bullish' ? '↑ Alcista' : news.impact === 'bearish' ? '↓ Bajista' : '→ Neutro';
-  const dots = news.importance === 'high' ? 3 : news.importance === 'medium' ? 2 : 1;
+  const color = news.impact === 'bullish' ? '#34C759' : news.impact === 'bearish' ? '#FF3B30' : '#FF9500';
+  const arrow = news.impact === 'bullish' ? '↑' : news.impact === 'bearish' ? '↓' : '→';
   return (
-    <div className="rounded-2xl overflow-hidden cursor-pointer" style={{ background: '#1C1C1E', border: '1px solid #38383A' }}
-      onClick={() => setOpen(!open)}>
+    <div onClick={() => setOpen(!open)} className="rounded-2xl cursor-pointer"
+      style={{ background: '#1C1C1E', border: '1px solid #2C2C2E' }}>
       <div className="flex items-center gap-3 px-4 py-3">
-        <div className="flex gap-0.5 shrink-0">
-          {[1,2,3].map(i => <div key={i} className="w-1.5 h-1.5 rounded-full" style={{ background: i <= dots ? (news.importance === 'high' ? '#FF3B30' : news.importance === 'medium' ? '#FF9500' : '#8E8E93') : '#2C2C2E' }} />)}
-        </div>
+        <span className="text-base shrink-0" style={{ color }}>{arrow}</span>
         <div className="flex-1 min-w-0">
           <div className="text-sm text-white truncate">{news.headline}</div>
-          <div className="flex items-center gap-2 mt-0.5">
-            <span className="text-xs text-[#636366]">{news.time}</span>
-            {news.source && <span className="text-xs text-[#38383A]">{news.source}</span>}
-          </div>
+          <div className="text-xs text-[#636366] mt-0.5">{news.time}</div>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          <span className="text-xs font-bold" style={{ color: ic }}>{label}</span>
-          {open ? <ChevronUp size={13} color="#636366" /> : <ChevronDown size={13} color="#636366" />}
-        </div>
+        {open ? <ChevronUp size={13} color="#636366" /> : <ChevronDown size={13} color="#636366" />}
       </div>
       <AnimatePresence>
         {open && (
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }}>
-            <div className="px-4 pb-3 border-t border-[#38383A] pt-2">
+            <div className="px-4 pb-3 pt-1 border-t border-[#2C2C2E]">
               <p className="text-xs text-[#8E8E93] leading-relaxed">{news.reasoning}</p>
             </div>
           </motion.div>
@@ -242,47 +180,38 @@ function NewsCard({ news }: { news: NewsImpact }) {
   );
 }
 
+// ─── Main Screen ──────────────────────────────────────────────────────────────
+
 export default function QuantScreen() {
   const [analysis, setAnalysis] = useState<QuantAnalysis | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [symbol, setSymbol] = useState('SPX');
   const [showPicker, setShowPicker] = useState(false);
-  const [activeTab, setActiveTab] = useState<'signals' | 'news' | 'metrics'>('signals');
+  const [activeTab, setActiveTab] = useState<'signals' | 'news'>('signals');
   const [signalHistory, setSignalHistory] = useState<StoredSignal[]>([]);
-  const [showHistory, setShowHistory] = useState(true);
-  const [nextRefreshIn, setNextRefreshIn] = useState(900);
   const [timeframe, setTimeframe] = useState<'15min' | '1h' | '4h'>('15min');
-  // Cronómetro de vigencia de señal activa (8 barras = 8 * tf en minutos)
-  const [signalExpiry, setSignalExpiry] = useState<number>(0);
+  const [signalExpiry, setSignalExpiry] = useState(0);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const expiryRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const countdown = useCountdown(nextRefreshIn);
   const expiryCountdown = useCountdown(signalExpiry);
-
-  const tfMinutes: Record<string, number> = { '15min': 15, '1h': 60, '4h': 240 };
 
   const refreshHistory = useCallback((sym: string) => {
     setSignalHistory(loadSignalHistory(sym));
   }, []);
 
-  const load = useCallback(async (sym: string) => {
+  const load = useCallback(async (sym: string, tf = timeframe) => {
     setLoading(true);
     setError(null);
     try {
       const result = await runQuantAnalysis(sym);
       setAnalysis(result);
       refreshHistory(sym);
-      setNextRefreshIn(900);
-      // Calcular vigencia de la señal activa: 8 barras del timeframe seleccionado
-      if (result.metrics.lastSignal && result.metrics.lastSignal.direction !== 'NONE') {
-        const tf = timeframe;
-        const barsLeft = 8; // max holding bars
-        setSignalExpiry(barsLeft * tfMinutes[tf] * 60); // en segundos
+      if (result.metrics.lastSignal?.direction !== 'NONE') {
+        setSignalExpiry(8 * TF_MINUTES[tf] * 60);
       }
     } catch (e) {
-      setError('Error al ejecutar el modelo. Verifica tu conexion.');
+      setError('No se pudo ejecutar el análisis.');
       console.error(e);
     } finally {
       setLoading(false);
@@ -292,97 +221,60 @@ export default function QuantScreen() {
   useEffect(() => {
     load(symbol);
     refreshHistory(symbol);
-    countdownRef.current = setInterval(() => {
-      setNextRefreshIn(prev => {
-        if (prev <= 1) { load(symbol); return 900; }
-        return prev - 1;
-      });
-    }, 1000);
+    countdownRef.current = setInterval(() => load(symbol), 15 * 60 * 1000);
     return () => { if (countdownRef.current) clearInterval(countdownRef.current); };
-  }, [symbol, load, refreshHistory]);
-
-  const handleSymbolChange = (sym: string) => {
-    setSymbol(sym);
-    setShowPicker(false);
-    setAnalysis(null);
-    setSignalHistory([]);
-    setNextRefreshIn(900);
-    load(sym);
-  };
-
-  const handleClearHistory = () => {
-    clearSignalHistory(symbol);
-    setSignalHistory([]);
-  };
-
-  const handleManualRefresh = () => {
-    setNextRefreshIn(900);
-    load(symbol);
-  };
+  }, [symbol]);
 
   const asset = QUANT_ASSETS.find(a => a.symbol === symbol) || QUANT_ASSETS[0];
-  const regimeLabel: Record<string, string> = {
-    trending_up: 'Tendencia Alcista', trending_down: 'Tendencia Bajista',
-    ranging: 'Rango / Lateral', volatile: 'Alta Volatilidad',
-  };
-  const regimeColor: Record<string, string> = {
-    trending_up: '#34C759', trending_down: '#FF3B30', ranging: '#FF9500', volatile: '#AF52DE',
-  };
-
   const lastSig = analysis?.metrics.lastSignal;
   const lastSigColor = lastSig?.direction === 'LONG' ? '#34C759' : lastSig?.direction === 'SHORT' ? '#FF3B30' : '#636366';
-  const hasActiveSignal = lastSig && lastSig.direction !== 'NONE' && signalExpiry > 0;
+  const hasSignal = lastSig && lastSig.direction !== 'NONE';
 
   return (
     <div className="flex-1 flex flex-col bg-black overflow-hidden">
-      {/* Header — UN SOLO BOTÓN */}
-      <div className="shrink-0 px-5 md:px-8 py-4"
+
+      {/* ── HEADER ── */}
+      <div className="shrink-0 px-5 py-4"
         style={{ background: 'rgba(0,0,0,0.95)', backdropFilter: 'blur(20px)', borderBottom: '1px solid #1C1C1E' }}>
         <div className="flex items-center justify-between">
-          <div className="flex-1 min-w-0">
-            <button onClick={() => setShowPicker(!showPicker)} className="flex items-center gap-2 mb-0.5">
-              <span className="text-xl font-black text-white">{symbol}</span>
-              <span className="text-sm font-medium" style={{ color: asset.color }}>{asset.name}</span>
-              <ChevronDown size={15} color="#636366" />
-            </button>
+
+          {/* Activo + precio */}
+          <button onClick={() => setShowPicker(!showPicker)} className="flex items-start flex-col gap-0.5">
+            <div className="flex items-center gap-1.5">
+              <span className="text-lg font-black text-white">{symbol}</span>
+              <span className="text-xs font-medium px-2 py-0.5 rounded-full"
+                style={{ color: asset.color, background: asset.color + '20' }}>{asset.name}</span>
+              <ChevronDown size={13} color="#636366" />
+            </div>
             {analysis && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <span className="text-2xl font-black text-white">
                   {analysis.currentPrice > 10 ? '$' : ''}{analysis.currentPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </span>
-                <span className="text-sm font-bold" style={{ color: analysis.priceChange >= 0 ? '#34C759' : '#FF3B30' }}>
-                  {analysis.priceChange >= 0 ? '+' : ''}{analysis.priceChange.toFixed(2)} ({analysis.priceChangePct >= 0 ? '+' : ''}{analysis.priceChangePct.toFixed(2)}%)
+                <span className="text-xs font-bold" style={{ color: analysis.priceChange >= 0 ? '#34C759' : '#FF3B30' }}>
+                  {analysis.priceChange >= 0 ? '+' : ''}{analysis.priceChangePct.toFixed(2)}%
                 </span>
               </div>
             )}
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {analysis && (
-              <div className="flex items-center gap-1 text-xs" style={{ color: analysis.isMarketOpen ? '#34C759' : '#636366' }}>
-                <div className="w-1.5 h-1.5 rounded-full" style={{ background: analysis.isMarketOpen ? '#34C759' : '#636366' }} />
-                <span className="hidden md:inline">{analysis.isMarketOpen ? 'Abierto' : 'Cerrado'}</span>
-                <span className="text-[#38383A] ml-1 hidden md:inline">{analysis.nyTime} NY</span>
-              </div>
-            )}
-            {/* UN SOLO BOTÓN */}
-            <button onClick={handleManualRefresh} disabled={loading}
-              className="px-4 py-2 rounded-full flex items-center gap-2 font-bold text-sm transition-all active:scale-95 disabled:opacity-50"
-              style={{ background: loading ? '#1C1C1E' : 'linear-gradient(135deg, #AF52DE, #007AFF)', color: '#FFFFFF', border: loading ? '1px solid #38383A' : 'none' }}>
-              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-              {loading ? 'Analizando...' : 'Analizar Ahora'}
-            </button>
-          </div>
+          </button>
+
+          {/* Botón único */}
+          <button onClick={() => load(symbol)} disabled={loading}
+            className="w-10 h-10 rounded-full flex items-center justify-center transition-all active:scale-90 disabled:opacity-50"
+            style={{ background: loading ? '#1C1C1E' : 'linear-gradient(135deg, #AF52DE, #007AFF)', border: loading ? '1px solid #38383A' : 'none' }}>
+            <RefreshCw size={16} color="#FFFFFF" className={loading ? 'animate-spin' : ''} />
+          </button>
         </div>
 
         {/* Asset picker */}
         <AnimatePresence>
           {showPicker && (
-            <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-              className="mt-3 flex flex-wrap gap-2">
+            <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+              className="mt-3 flex flex-wrap gap-1.5">
               {QUANT_ASSETS.map(a => (
-                <button key={a.symbol} onClick={() => handleSymbolChange(a.symbol)}
+                <button key={a.symbol} onClick={() => { setSymbol(a.symbol); setShowPicker(false); setAnalysis(null); load(a.symbol); }}
                   className="px-3 py-1.5 rounded-xl text-xs font-bold transition-all"
-                  style={{ background: symbol === a.symbol ? a.color : '#1C1C1E', color: symbol === a.symbol ? '#000' : '#8E8E93', border: `1px solid ${symbol === a.symbol ? a.color : '#38383A'}` }}>
+                  style={{ background: symbol === a.symbol ? a.color : '#1C1C1E', color: symbol === a.symbol ? '#000' : '#8E8E93', border: `1px solid ${symbol === a.symbol ? a.color : '#2C2C2E'}` }}>
                   {a.symbol}
                 </button>
               ))}
@@ -391,282 +283,204 @@ export default function QuantScreen() {
         </AnimatePresence>
       </div>
 
-      {/* Loading */}
+      {/* ── LOADING ── */}
       {loading && !analysis && (
-        <div className="flex-1 flex flex-col items-center justify-center gap-4">
+        <div className="flex-1 flex flex-col items-center justify-center gap-3">
           <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}>
-            <BarChart2 size={32} color={asset.color} />
+            <BarChart2 size={28} color={asset.color} />
           </motion.div>
-          <div className="text-center">
-            <p className="text-white font-bold">Ejecutando Modelo Cuant</p>
-            <p className="text-xs text-[#636366] mt-1">Calculando anomalias logaritmicas ±2.5σ...</p>
-          </div>
-          <div className="flex gap-1">
-            {[0,1,2].map(i => (
-              <motion.div key={i} className="w-2 h-2 rounded-full" style={{ background: asset.color }}
-                animate={{ scale: [0,1,0] }} transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }} />
-            ))}
-          </div>
+          <p className="text-sm text-[#636366]">Calculando anomalías...</p>
         </div>
       )}
 
-      {/* Error */}
+      {/* ── ERROR ── */}
       {error && !loading && (
         <div className="flex-1 flex items-center justify-center px-6">
           <div className="text-center">
-            <AlertTriangle size={28} color="#FF3B30" className="mx-auto mb-3" />
-            <p className="text-white font-semibold mb-1">Error del modelo</p>
+            <p className="text-white font-semibold mb-2">Error del modelo</p>
             <p className="text-xs text-[#636366] mb-4">{error}</p>
-            <button onClick={() => load(symbol)} className="px-6 py-3 rounded-full bg-white text-black font-semibold text-sm">Reintentar</button>
+            <button onClick={() => load(symbol)}
+              className="px-6 py-2.5 rounded-full bg-white text-black font-semibold text-sm">
+              Reintentar
+            </button>
           </div>
         </div>
       )}
 
-      {/* Content */}
+      {/* ── CONTENT ── */}
       {analysis && (
         <div className="flex-1 overflow-y-auto no-scrollbar">
-          <div className="px-5 md:px-8 pb-8">
+          <div className="px-5 pb-8 space-y-3 pt-4">
 
-            {/* ── CRONÓMETRO DE VIGENCIA DE SEÑAL ── */}
-            {hasActiveSignal && (
-              <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
-                className="mt-4 p-4 rounded-2xl flex items-center justify-between"
-                style={{ background: lastSigColor + '12', border: `1px solid ${lastSigColor}40` }}>
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center"
-                    style={{ background: lastSigColor + '20' }}>
-                    {lastSig!.direction === 'LONG'
-                      ? <TrendingUp size={20} color={lastSigColor} />
-                      : <TrendingDown size={20} color={lastSigColor} />}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-black" style={{ color: lastSigColor }}>
-                        SEÑAL {lastSig!.direction} ACTIVA
-                      </span>
-                      <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: lastSigColor }} />
+            {/* ── SEÑAL ACTIVA + CRONÓMETRO ── */}
+            {hasSignal && (
+              <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+                className="rounded-2xl p-4"
+                style={{ background: lastSigColor + '10', border: `1px solid ${lastSigColor}35` }}>
+                <div className="flex items-center justify-between">
+                  {/* Dirección */}
+                  <div className="flex items-center gap-3">
+                    <div className="w-11 h-11 rounded-xl flex items-center justify-center"
+                      style={{ background: lastSigColor + '20' }}>
+                      {lastSig!.direction === 'LONG'
+                        ? <TrendingUp size={22} color={lastSigColor} />
+                        : <TrendingDown size={22} color={lastSigColor} />}
                     </div>
-                    <span className="text-xs text-[#8E8E93]">
-                      Entrada: {lastSig!.entryPrice.toLocaleString()} · Fuerza: {Math.round(lastSig!.signalStrength * 100)}%
-                    </span>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-base font-black" style={{ color: lastSigColor }}>
+                          {lastSig!.direction}
+                        </span>
+                        <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: lastSigColor }} />
+                      </div>
+                      <div className="text-xs text-[#8E8E93]">
+                        {lastSig!.entryPrice.toLocaleString()} · {Math.round(lastSig!.signalStrength * 100)}% fuerza
+                      </div>
+                    </div>
                   </div>
+
+                  {/* Cronómetro */}
+                  {signalExpiry > 0 && (
+                    <div className="text-right">
+                      <div className="text-xs text-[#636366] mb-0.5">Vigencia</div>
+                      <div className="font-mono font-black text-2xl leading-none"
+                        style={{ color: signalExpiry < 300 ? '#FF3B30' : signalExpiry < 900 ? '#FF9500' : lastSigColor }}>
+                        {expiryCountdown}
+                      </div>
+                    </div>
+                  )}
                 </div>
-                {/* Cronómetro */}
-                <div className="text-right">
-                  <div className="text-xs text-[#636366] mb-0.5">Vigencia</div>
-                  <div className="font-mono font-black text-xl" style={{ color: signalExpiry < 300 ? '#FF3B30' : signalExpiry < 900 ? '#FF9500' : lastSigColor }}>
-                    {expiryCountdown}
+
+                {/* SL / TP */}
+                <div className="grid grid-cols-3 gap-2 mt-3">
+                  <div className="p-2 rounded-xl text-center" style={{ background: '#00000030' }}>
+                    <div className="text-xs text-[#636366]">Entrada</div>
+                    <div className="text-xs font-bold text-white">{lastSig!.entryPrice.toLocaleString()}</div>
                   </div>
-                  <div className="text-xs text-[#636366]">restante</div>
+                  <div className="p-2 rounded-xl text-center" style={{ background: 'rgba(255,59,48,0.12)' }}>
+                    <div className="text-xs text-[#FF3B30]">Stop</div>
+                    <div className="text-xs font-bold text-[#FF3B30]">{lastSig!.stopLoss.toLocaleString()}</div>
+                  </div>
+                  <div className="p-2 rounded-xl text-center" style={{ background: 'rgba(52,199,89,0.12)' }}>
+                    <div className="text-xs text-[#34C759]">Target</div>
+                    <div className="text-xs font-bold text-[#34C759]">{lastSig!.takeProfit.toLocaleString()}</div>
+                  </div>
                 </div>
               </motion.div>
             )}
 
-            {/* ── SELECTOR DE TEMPORALIDADES ── */}
-            <div className="mt-4 flex items-center gap-2">
-              <span className="text-xs text-[#636366] shrink-0">Temporalidad:</span>
-              <div className="flex rounded-xl overflow-hidden" style={{ border: '1px solid #38383A' }}>
-                {(['15min', '1h', '4h'] as const).map((tf) => (
-                  <button key={tf} onClick={() => { setTimeframe(tf); handleManualRefresh(); }}
-                    className="px-3 py-1.5 text-xs font-bold transition-all"
-                    style={{
-                      background: timeframe === tf ? asset.color : 'transparent',
-                      color: timeframe === tf ? '#000' : '#8E8E93',
-                    }}>
-                    {tf}
-                  </button>
-                ))}
+            {/* ── TEMPORALIDAD + RESUMEN ── */}
+            <div className="rounded-2xl p-4" style={{ background: '#1C1C1E', border: '1px solid #2C2C2E' }}>
+              {/* Selector de temporalidad */}
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs text-[#636366]">Temporalidad</span>
+                <div className="flex rounded-xl overflow-hidden" style={{ border: '1px solid #2C2C2E' }}>
+                  {(['15min', '1h', '4h'] as const).map((tf) => (
+                    <button key={tf} onClick={() => { setTimeframe(tf); load(symbol, tf); }}
+                      className="px-3 py-1 text-xs font-bold transition-all"
+                      style={{ background: timeframe === tf ? asset.color : 'transparent', color: timeframe === tf ? '#000' : '#636366' }}>
+                      {tf}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="flex items-center gap-1 ml-auto text-xs font-mono" style={{ color: '#FF9500' }}>
-                <Timer size={11} color="#FF9500" />
-                <span className="font-bold">{countdown}</span>
+
+              {/* Resumen IA */}
+              <p className="text-sm text-[#8E8E93] leading-relaxed">{analysis.aiSummary}</p>
+
+              {/* Régimen */}
+              <div className="flex items-center justify-between mt-3">
+                <span className="text-xs text-[#636366]">
+                  {analysis.isMarketOpen ? '● Mercado abierto' : '○ Mercado cerrado'} · {analysis.nyTime} NY
+                </span>
+                <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                  style={{
+                    color: { trending_up: '#34C759', trending_down: '#FF3B30', ranging: '#FF9500', volatile: '#AF52DE' }[analysis.marketRegime] || '#FF9500',
+                    background: ({ trending_up: '#34C75920', trending_down: '#FF3B3020', ranging: '#FF950020', volatile: '#AF52DE20' }[analysis.marketRegime] || '#FF950020'),
+                  }}>
+                  {{ trending_up: 'Alcista', trending_down: 'Bajista', ranging: 'Lateral', volatile: 'Volátil' }[analysis.marketRegime] || analysis.marketRegime}
+                </span>
               </div>
             </div>
 
-            {/* AI Summary + regime */}
-            <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
-              className="mt-3 p-4 rounded-2xl" style={{ background: '#1C1C1E', border: `1px solid ${asset.color}25` }}>
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <Zap size={14} color={asset.color} />
-                  <span className="text-xs font-bold uppercase tracking-wider" style={{ color: asset.color }}>
-                    Modelo Cuant — {timeframe}
-                  </span>
-                </div>
-                <span className="text-xs font-bold px-2 py-0.5 rounded-full"
-                  style={{ color: regimeColor[analysis.marketRegime] || '#FF9500', background: (regimeColor[analysis.marketRegime] || '#FF9500') + '20' }}>
-                  {regimeLabel[analysis.marketRegime] || analysis.marketRegime}
-                </span>
-              </div>
-              <p className="text-sm text-[#8E8E93] leading-relaxed">{analysis.aiSummary}</p>
-              <div className="flex items-center gap-2 mt-2 text-xs text-[#636366]">
-                <Clock size={10} />
-                <span>Proxima señal: {analysis.nextSignalWindow}</span>
-              </div>
-            </motion.div>
-
-            {/* Last signal highlight */}
-            {lastSig && lastSig.direction !== 'NONE' && (
-              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-                className="mt-3 p-4 rounded-2xl" style={{ background: '#1C1C1E', border: `1px solid ${lastSigColor}40` }}>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    {lastSig.direction === 'LONG' ? <TrendingUp size={16} color={lastSigColor} /> : <TrendingDown size={16} color={lastSigColor} />}
-                    <span className="text-sm font-bold" style={{ color: lastSigColor }}>Ultima Señal: {lastSig.direction}</span>
-                  </div>
-                  <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ color: lastSigColor, background: lastSigColor + '20' }}>
-                    {Math.round(lastSig.signalStrength * 100)}% fuerza
-                  </span>
-                </div>
-                <ZScoreBar zScore={lastSig.zScore} />
-                <div className="grid grid-cols-3 gap-2 mt-3">
-                  <div className="text-center p-2 rounded-xl" style={{ background: '#2C2C2E' }}>
-                    <span className="text-xs text-[#636366] block">Entrada</span>
-                    <span className="text-xs font-bold text-white">{lastSig.entryPrice.toLocaleString()}</span>
-                  </div>
-                  <div className="text-center p-2 rounded-xl" style={{ background: 'rgba(255,59,48,0.1)' }}>
-                    <span className="text-xs text-[#FF3B30] block">SL</span>
-                    <span className="text-xs font-bold text-[#FF3B30]">{lastSig.stopLoss.toLocaleString()}</span>
-                  </div>
-                  <div className="text-center p-2 rounded-xl" style={{ background: 'rgba(52,199,89,0.1)' }}>
-                    <span className="text-xs text-[#34C759] block">TP Media</span>
-                    <span className="text-xs font-bold text-[#34C759]">{lastSig.takeProfit.toLocaleString()}</span>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-
-            {/* Tabs */}
-            <div className="flex p-1 rounded-xl mt-4 mb-4" style={{ background: '#1C1C1E', border: '1px solid #38383A' }}>
+            {/* ── TABS ── */}
+            <div className="flex rounded-xl overflow-hidden" style={{ background: '#1C1C1E', border: '1px solid #2C2C2E' }}>
               {[
                 { key: 'signals', label: 'Señales', Icon: Activity },
-                { key: 'news', label: 'Noticias', Icon: AlertTriangle },
-                { key: 'metrics', label: 'Metricas', Icon: BarChart2 },
+                { key: 'news', label: 'Noticias', Icon: Newspaper },
               ].map(({ key, label, Icon }) => (
                 <button key={key} onClick={() => setActiveTab(key as typeof activeTab)}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all"
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold transition-all"
                   style={{ background: activeTab === key ? '#2C2C2E' : 'transparent', color: activeTab === key ? '#FFFFFF' : '#636366' }}>
                   <Icon size={12} />{label}
                 </button>
               ))}
             </div>
 
-            {/* Signals tab */}
+            {/* ── SEÑALES ── */}
             {activeTab === 'signals' && (
               <div className="space-y-2">
-                {analysis.signals.length > 0 && (
-                  <>
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="w-2 h-2 rounded-full bg-[#34C759] animate-pulse" />
-                      <span className="text-xs font-bold text-[#34C759] uppercase tracking-wider">
-                        Señales actuales — {analysis.signals.length} detectadas
-                      </span>
-                    </div>
-                    {[...analysis.signals].sort((a, b) => b.timestamp.localeCompare(a.timestamp)).slice(0, 15).map((sig, i) => (
-                      <SignalRow key={sig.timestamp + i} sig={sig} isLatest={i === 0} currentPrice={analysis.currentPrice} />
-                    ))}
-                  </>
-                )}
-                {analysis.signals.length === 0 && (
-                  <div className="text-center py-6 rounded-2xl" style={{ background: '#1C1C1E', border: '1px solid #38383A' }}>
-                    <Activity size={28} color="#38383A" className="mx-auto mb-3" />
-                    <p className="text-sm text-[#636366]">Sin anomalias en la sesion actual</p>
-                    <p className="text-xs text-[#38383A] mt-1">El modelo requiere |Z-Score| {'>='} 2.5σ</p>
+                {analysis.signals.length === 0 && signalHistory.length === 0 && (
+                  <div className="text-center py-8 rounded-2xl" style={{ background: '#1C1C1E', border: '1px solid #2C2C2E' }}>
+                    <Activity size={24} color="#38383A" className="mx-auto mb-2" />
+                    <p className="text-sm text-[#636366]">Sin anomalías detectadas</p>
+                    <p className="text-xs text-[#38383A] mt-1">Pulsa el botón para analizar</p>
                   </div>
                 )}
+
+                {/* Señales actuales */}
+                {analysis.signals.length > 0 && (
+                  <>
+                    <p className="text-xs font-bold text-[#34C759] uppercase tracking-wider px-1">
+                      {analysis.signals.length} señal{analysis.signals.length > 1 ? 'es' : ''} detectada{analysis.signals.length > 1 ? 's' : ''}
+                    </p>
+                    {[...analysis.signals]
+                      .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+                      .slice(0, 10)
+                      .map((sig, i) => (
+                        <SignalCard key={sig.timestamp + i} sig={sig} currentPrice={analysis.currentPrice} isLatest={i === 0} />
+                      ))}
+                  </>
+                )}
+
+                {/* Historial */}
                 {signalHistory.length > 0 && (
-                  <div className="mt-4">
-                    <button onClick={() => setShowHistory(!showHistory)}
-                      className="w-full flex items-center justify-between px-4 py-3 rounded-2xl mb-2"
-                      style={{ background: '#1C1C1E', border: '1px solid #38383A' }}>
-                      <div className="flex items-center gap-2">
-                        <History size={14} color="#636366" />
-                        <span className="text-xs font-bold text-[#8E8E93] uppercase tracking-wider">
-                          Historial — {signalHistory.length} señales
-                        </span>
+                  <div className="mt-2">
+                    <div className="flex items-center justify-between px-1 mb-2">
+                      <p className="text-xs text-[#636366]">Historial ({signalHistory.length})</p>
+                      <button onClick={() => { clearSignalHistory(symbol); setSignalHistory([]); }}
+                        className="text-xs text-[#FF3B30]">Limpiar</button>
+                    </div>
+                    {signalHistory.slice(0, 20).map((sig, i) => (
+                      <div key={sig.timestamp + i} className="mb-2">
+                        <SignalCard sig={sig} currentPrice={analysis.currentPrice} />
                       </div>
-                      <div className="flex items-center gap-2">
-                        <button onClick={(e) => { e.stopPropagation(); handleClearHistory(); }}
-                          className="p-1 rounded-lg" style={{ background: 'rgba(255,59,48,0.1)' }}>
-                          <Trash2 size={12} color="#FF3B30" />
-                        </button>
-                        {showHistory ? <ChevronUp size={14} color="#636366" /> : <ChevronDown size={14} color="#636366" />}
-                      </div>
-                    </button>
-                    <AnimatePresence>
-                      {showHistory && (
-                        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
-                          exit={{ opacity: 0, height: 0 }} className="space-y-2">
-                          {signalHistory.slice(0, 50).map((sig, i) => (
-                            <SignalRow key={sig.timestamp + sig.symbol + i} sig={sig} isLatest={false} isHistorical currentPrice={analysis.currentPrice} />
-                          ))}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
+                    ))}
                   </div>
                 )}
               </div>
             )}
 
-            {/* News tab */}
+            {/* ── NOTICIAS ── */}
             {activeTab === 'news' && (
               <div className="space-y-2">
-                <div className="flex items-center gap-2 mb-3">
-                  <AlertTriangle size={13} color="#FF9500" />
-                  <span className="text-xs text-[#8E8E93]">Noticias recientes y su impacto en {analysis.assetName}.</span>
-                </div>
                 {analysis.newsImpacts.length === 0 && (
-                  <p className="text-xs text-[#636366] text-center py-6">No se encontraron noticias recientes.</p>
+                  <div className="text-center py-8 rounded-2xl" style={{ background: '#1C1C1E', border: '1px solid #2C2C2E' }}>
+                    <Newspaper size={24} color="#38383A" className="mx-auto mb-2" />
+                    <p className="text-sm text-[#636366]">Sin noticias recientes</p>
+                  </div>
                 )}
                 {analysis.newsImpacts.map((n, i) => (
-                  <motion.div key={i} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
+                  <motion.div key={i} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
                     <NewsCard news={n} />
                   </motion.div>
                 ))}
               </div>
             )}
 
-            {/* Metrics tab */}
-            {activeTab === 'metrics' && (
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    { label: 'Total Anomalias', value: analysis.metrics.totalSignals, color: '#FF9500' },
-                    { label: 'Sig. 95%', value: analysis.metrics.significantSignals, color: '#34C759' },
-                    { label: 'Sig. 99%', value: analysis.metrics.significantSignals99, color: '#007AFF' },
-                    { label: 'Tasa Anomalia', value: analysis.metrics.anomalyRate + '%', color: '#AF52DE' },
-                  ].map(({ label, value, color }) => (
-                    <div key={label} className="p-4 rounded-2xl" style={{ background: '#1C1C1E', border: '1px solid #38383A' }}>
-                      <span className="text-xs text-[#636366] block mb-1">{label}</span>
-                      <span className="text-2xl font-black" style={{ color }}>{value}</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="p-4 rounded-2xl" style={{ background: '#1C1C1E', border: '1px solid #38383A' }}>
-                  <span className="text-xs font-bold text-[#636366] uppercase tracking-wider block mb-3">Parametros del Modelo</span>
-                  {[
-                    ['Ventana (Media Movil)', '30 barras'],
-                    ['Umbral (σ)', '±2.5 desv. estandar'],
-                    ['Max Hold', '8 barras'],
-                    ['Temporalidad activa', timeframe],
-                    ['Vigencia señal', `${8 * tfMinutes[timeframe]} min`],
-                    ['Confianza', '95% (p < 0.05)'],
-                    ['Estrategia', 'Mean Reversion'],
-                    ['Z-Score Max', analysis.metrics.zScoreMax.toFixed(4)],
-                    ['Z-Score Min', analysis.metrics.zScoreMin.toFixed(4)],
-                  ].map(([k, v]) => (
-                    <div key={k} className="flex items-center justify-between py-1.5 border-b border-[#2C2C2E] last:border-0">
-                      <span className="text-xs text-[#8E8E93]">{k}</span>
-                      <span className="text-xs font-mono font-bold text-white">{v}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         </div>
       )}
     </div>
   );
 }
-
