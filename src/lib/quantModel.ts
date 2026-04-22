@@ -178,7 +178,7 @@ function getNextSignalWindow(): string {
 
 // ─── Fetch candles ────────────────────────────────────────────────────────────
 
-export async function fetchQuantCandles(symbol: string, interval = '15min', outputsize = 100): Promise<QuantCandle[]> {
+export async function fetchQuantCandles(symbol: string, interval = '15min', outputsize = 500): Promise<QuantCandle[]> {
   try {
     const res = await axios.get('/api/twelve/time_series', {
       params: { symbol, interval, outputsize, apikey: TWELVE_KEY, format: 'JSON' },
@@ -194,6 +194,67 @@ export async function fetchQuantCandles(symbol: string, interval = '15min', outp
   } catch {
     return [];
   }
+}
+
+// ─── Signal history persistence (localStorage) ────────────────────────────────
+
+const HISTORY_KEY = 'quant_signal_history_v2';
+const MAX_HISTORY = 200; // max signals to keep per symbol
+
+export interface StoredSignal extends LogAnomalySignal {
+  symbol: string;
+  savedAt: string;
+}
+
+export function loadSignalHistory(symbol: string): StoredSignal[] {
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY);
+    if (!raw) return [];
+    const all: StoredSignal[] = JSON.parse(raw);
+    return all.filter(s => s.symbol === symbol).sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  } catch {
+    return [];
+  }
+}
+
+export function saveSignalsToHistory(symbol: string, newSignals: LogAnomalySignal[]): void {
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY);
+    const all: StoredSignal[] = raw ? JSON.parse(raw) : [];
+
+    // Get existing timestamps for this symbol to avoid duplicates
+    const existingTimestamps = new Set(all.filter(s => s.symbol === symbol).map(s => s.timestamp));
+
+    // Add only new signals
+    const toAdd: StoredSignal[] = newSignals
+      .filter(s => !existingTimestamps.has(s.timestamp))
+      .map(s => ({ ...s, symbol, savedAt: new Date().toISOString() }));
+
+    if (toAdd.length === 0) return;
+
+    // Merge, keep latest MAX_HISTORY per symbol
+    const otherSymbols = all.filter(s => s.symbol !== symbol);
+    const thisSymbol = [...all.filter(s => s.symbol === symbol), ...toAdd]
+      .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+      .slice(0, MAX_HISTORY);
+
+    localStorage.setItem(HISTORY_KEY, JSON.stringify([...otherSymbols, ...thisSymbol]));
+  } catch {
+    // localStorage full or unavailable — ignore
+  }
+}
+
+export function clearSignalHistory(symbol?: string): void {
+  try {
+    if (!symbol) {
+      localStorage.removeItem(HISTORY_KEY);
+      return;
+    }
+    const raw = localStorage.getItem(HISTORY_KEY);
+    if (!raw) return;
+    const all: StoredSignal[] = JSON.parse(raw);
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(all.filter(s => s.symbol !== symbol)));
+  } catch { /* ignore */ }
 }
 
 async function fetchCurrentPrice(symbol: string): Promise<{ price: number; change: number; pct: number }> {
@@ -477,6 +538,11 @@ export async function runQuantAnalysis(symbol = 'SPX'): Promise<QuantAnalysis> {
   const signals = candles15m.length >= MODEL_CONFIG.window + MODEL_CONFIG.minPeriods
     ? runLogAnomalyModel(candles15m)
     : [];
+
+  // Persist new signals to localStorage history
+  if (signals.length > 0) {
+    saveSignalsToHistory(symbol, signals);
+  }
 
   const metrics = calcMetrics(signals, candles15m.length);
 

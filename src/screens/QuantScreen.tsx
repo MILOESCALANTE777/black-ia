@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { TrendingUp, TrendingDown, RefreshCw, Clock, Zap, AlertTriangle, ChevronDown, ChevronUp, Activity, BarChart2 } from 'lucide-react';
-import { runQuantAnalysis, type QuantAnalysis, type LogAnomalySignal, type NewsImpact } from '@/lib/quantModel';
+import { TrendingUp, TrendingDown, RefreshCw, Clock, Zap, AlertTriangle, ChevronDown, ChevronUp, Activity, BarChart2, Trash2, History } from 'lucide-react';
+import { runQuantAnalysis, type QuantAnalysis, type LogAnomalySignal, type NewsImpact, loadSignalHistory, clearSignalHistory, type StoredSignal } from '@/lib/quantModel';
 
 const QUANT_ASSETS = [
   { symbol: 'SPX',     name: 'S&P 500',    color: '#007AFF' },
@@ -38,14 +38,14 @@ function ZScoreBar({ zScore, threshold = 2.5 }: { zScore: number; threshold?: nu
   );
 }
 
-function SignalRow({ sig, isLatest }: { sig: LogAnomalySignal; isLatest?: boolean }) {
+function SignalRow({ sig, isLatest, isHistorical }: { sig: LogAnomalySignal; isLatest?: boolean; isHistorical?: boolean }) {
   const [open, setOpen] = useState(isLatest || false);
   const dirColor = sig.direction === 'LONG' ? '#34C759' : sig.direction === 'SHORT' ? '#FF3B30' : '#636366';
   const strengthPct = Math.round(sig.signalStrength * 100);
 
   return (
     <div className="rounded-2xl overflow-hidden cursor-pointer"
-      style={{ background: '#1C1C1E', border: `1px solid ${isLatest ? dirColor + '50' : '#38383A'}` }}
+      style={{ background: isHistorical ? '#161616' : '#1C1C1E', border: `1px solid ${isLatest ? dirColor + '50' : isHistorical ? '#2C2C2E' : '#38383A'}`, opacity: isHistorical ? 0.85 : 1 }}
       onClick={() => setOpen(!open)}>
       <div className="flex items-center gap-3 px-4 py-3">
         <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
@@ -58,6 +58,7 @@ function SignalRow({ sig, isLatest }: { sig: LogAnomalySignal; isLatest?: boolea
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-bold" style={{ color: dirColor }}>{sig.direction}</span>
             {isLatest && <span className="text-xs px-1.5 py-0.5 rounded font-bold" style={{ background: '#AF52DE20', color: '#AF52DE' }}>ULTIMA</span>}
+            {isHistorical && <span className="text-xs px-1.5 py-0.5 rounded font-bold" style={{ background: '#2C2C2E', color: '#636366' }}>HIST</span>}
             {sig.isSignificant99 && <span className="text-xs px-1.5 py-0.5 rounded font-bold" style={{ background: '#34C75920', color: '#34C759' }}>99%</span>}
             {sig.isSignificant && !sig.isSignificant99 && <span className="text-xs px-1.5 py-0.5 rounded font-bold" style={{ background: '#FF950020', color: '#FF9500' }}>95%</span>}
           </div>
@@ -156,7 +157,13 @@ export default function QuantScreen() {
   const [symbol, setSymbol] = useState('SPX');
   const [showPicker, setShowPicker] = useState(false);
   const [activeTab, setActiveTab] = useState<'signals' | 'news' | 'metrics'>('signals');
+  const [signalHistory, setSignalHistory] = useState<StoredSignal[]>([]);
+  const [showHistory, setShowHistory] = useState(true);
   const schedulerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const refreshHistory = useCallback((sym: string) => {
+    setSignalHistory(loadSignalHistory(sym));
+  }, []);
 
   const load = useCallback(async (sym: string) => {
     setLoading(true);
@@ -164,17 +171,19 @@ export default function QuantScreen() {
     try {
       const result = await runQuantAnalysis(sym);
       setAnalysis(result);
+      refreshHistory(sym);
     } catch (e) {
       setError('Error al ejecutar el modelo. Verifica tu conexion.');
       console.error(e);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [refreshHistory]);
 
   // Scheduler: check every minute if it's 9:29 NY -> pre-load data, 9:30 -> run signals
   useEffect(() => {
     load(symbol);
+    refreshHistory(symbol);
 
     const tick = () => {
       const now = new Date();
@@ -182,7 +191,6 @@ export default function QuantScreen() {
       const nyDate = new Date(nyStr);
       const h = nyDate.getHours();
       const m = nyDate.getMinutes();
-      // 9:29 -> pre-fetch (silent), 9:30 -> full analysis, every 15min during market hours
       if ((h === 9 && m === 29) || (h === 9 && m === 30)) {
         load(symbol);
       } else if (h >= 9 && h < 16 && m % 15 === 0) {
@@ -192,13 +200,19 @@ export default function QuantScreen() {
 
     schedulerRef.current = setInterval(tick, 60000);
     return () => { if (schedulerRef.current) clearInterval(schedulerRef.current); };
-  }, [symbol, load]);
+  }, [symbol, load, refreshHistory]);
 
   const handleSymbolChange = (sym: string) => {
     setSymbol(sym);
     setShowPicker(false);
     setAnalysis(null);
+    setSignalHistory([]);
     load(sym);
+  };
+
+  const handleClearHistory = () => {
+    clearSignalHistory(symbol);
+    setSignalHistory([]);
   };
 
   const asset = QUANT_ASSETS.find(a => a.symbol === symbol) || QUANT_ASSETS[0];
@@ -374,16 +388,82 @@ export default function QuantScreen() {
             {/* Signals tab */}
             {activeTab === 'signals' && (
               <div className="space-y-2">
+                {/* Current session signals */}
+                {analysis.signals.length > 0 && (
+                  <>
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-2 h-2 rounded-full bg-[#34C759] animate-pulse" />
+                      <span className="text-xs font-bold text-[#34C759] uppercase tracking-wider">
+                        Señales actuales — {analysis.signals.length} detectadas
+                      </span>
+                    </div>
+                    {[...analysis.signals].sort((a, b) => b.timestamp.localeCompare(a.timestamp)).slice(0, 15).map((sig, i) => (
+                      <SignalRow key={sig.timestamp + i} sig={sig} isLatest={i === 0} />
+                    ))}
+                  </>
+                )}
+
                 {analysis.signals.length === 0 && (
-                  <div className="text-center py-8">
+                  <div className="text-center py-6 rounded-2xl" style={{ background: '#1C1C1E', border: '1px solid #38383A' }}>
                     <Activity size={28} color="#38383A" className="mx-auto mb-3" />
-                    <p className="text-sm text-[#636366]">Sin anomalias detectadas en las ultimas 100 barras</p>
-                    <p className="text-xs text-[#38383A] mt-1">El modelo requiere |Z-Score| {'>='} 2.5σ para generar señal</p>
+                    <p className="text-sm text-[#636366]">Sin anomalias en la sesion actual</p>
+                    <p className="text-xs text-[#38383A] mt-1">El modelo requiere |Z-Score| {'>='} 2.5σ</p>
                   </div>
                 )}
-                {[...analysis.signals].sort((a, b) => b.timestamp.localeCompare(a.timestamp)).slice(0, 15).map((sig, i) => (
-                  <SignalRow key={sig.timestamp + i} sig={sig} isLatest={i === 0} />
-                ))}
+
+                {/* Historical signals */}
+                {signalHistory.length > 0 && (
+                  <div className="mt-4">
+                    <button
+                      onClick={() => setShowHistory(!showHistory)}
+                      className="w-full flex items-center justify-between px-4 py-3 rounded-2xl mb-2"
+                      style={{ background: '#1C1C1E', border: '1px solid #38383A' }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <History size={14} color="#636366" />
+                        <span className="text-xs font-bold text-[#8E8E93] uppercase tracking-wider">
+                          Historial — {signalHistory.length} señales guardadas
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleClearHistory(); }}
+                          className="p-1 rounded-lg"
+                          style={{ background: 'rgba(255,59,48,0.1)' }}
+                        >
+                          <Trash2 size={12} color="#FF3B30" />
+                        </button>
+                        {showHistory ? <ChevronUp size={14} color="#636366" /> : <ChevronDown size={14} color="#636366" />}
+                      </div>
+                    </button>
+
+                    <AnimatePresence>
+                      {showHistory && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="space-y-2"
+                        >
+                          {signalHistory.slice(0, 50).map((sig, i) => (
+                            <SignalRow key={sig.timestamp + sig.symbol + i} sig={sig} isLatest={false} isHistorical />
+                          ))}
+                          {signalHistory.length > 50 && (
+                            <p className="text-xs text-[#38383A] text-center py-2">
+                              Mostrando 50 de {signalHistory.length} señales históricas
+                            </p>
+                          )}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                )}
+
+                {analysis.signals.length === 0 && signalHistory.length === 0 && (
+                  <p className="text-xs text-[#38383A] text-center mt-2">
+                    El historial se acumula con cada análisis. Vuelve durante el horario de mercado (9:30–16:00 NY).
+                  </p>
+                )}
               </div>
             )}
 
