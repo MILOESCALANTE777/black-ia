@@ -695,7 +695,7 @@ function QuantSignalsPanel({ symbol, assetName }: { symbol: string; assetName: s
         <p className="text-xs text-[#8E8E93] leading-relaxed">{qAnalysis.aiSummary}</p>
         <div className="flex items-center justify-between mt-2">
           <span className="text-xs text-[#636366]">
-            {qAnalysis.isMarketOpen ? '● Abierto' : '○ Cerrado'} · {qAnalysis.nyTime} NY
+            Actualizado: {qAnalysis.nyTime} NY
           </span>
           <span className="text-xs font-bold px-2 py-0.5 rounded-full"
             style={{

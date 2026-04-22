@@ -558,7 +558,7 @@ async function generateAISummary(params: {
 
   const prompt = `Eres un analista cuantitativo experto. Analiza los datos del modelo Log-Anomaly para ${symbol} (${assetName}).
 
-HORA NY: ${nyTime} | MERCADO: ${isMarketOpen ? 'ABIERTO' : 'CERRADO'}
+HORA NY: ${nyTime}
 PRECIO ACTUAL: ${currentPrice.toLocaleString()}
 
 METRICAS DEL MODELO (ventana 30 barras, umbral ±2.5σ):

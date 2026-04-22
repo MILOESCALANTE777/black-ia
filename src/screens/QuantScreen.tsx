@@ -504,7 +504,7 @@ export default function QuantScreen() {
               {/* Régimen */}
               <div className="flex items-center justify-between mt-3">
                 <span className="text-xs text-[#636366]">
-                  {analysis.isMarketOpen ? '● Mercado abierto' : '○ Mercado cerrado'} · {analysis.nyTime} NY
+                  Actualizado: {analysis.nyTime} NY
                 </span>
                 <span className="text-xs font-bold px-2 py-0.5 rounded-full"
                   style={{
