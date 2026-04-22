@@ -1,9 +1,12 @@
 import { AnimatePresence, motion } from 'framer-motion';
+import { useEffect } from 'react';
 import { useStore } from '@/store/useStore';
+import { getCurrentUser, getUserProfile, isSupabaseConfigured } from '@/lib/supabase';
 import BottomNavigation from '@/components/BottomNavigation';
 import SidebarNavigation from '@/components/SidebarNavigation';
 import SplashScreen from '@/screens/SplashScreen';
 import LandingScreen from '@/screens/LandingScreen';
+import AuthScreen from '@/screens/AuthScreen';
 import OnboardingFeaturesScreen from '@/screens/OnboardingFeaturesScreen';
 import ExperienceSelectScreen from '@/screens/ExperienceSelectScreen';
 import MarketSelectScreen from '@/screens/MarketSelectScreen';
@@ -52,6 +55,7 @@ function ScreenRouter() {
     switch (currentScreen) {
       case 'SplashScreen': return <SplashScreen />;
       case 'LandingScreen': return <LandingScreen />;
+      case 'AuthScreen': return <AuthScreen />;
       case 'OnboardingFeaturesScreen': return <OnboardingFeaturesScreen />;
       case 'ExperienceSelectScreen': return <ExperienceSelectScreen />;
       case 'MarketSelectScreen': return <MarketSelectScreen />;
@@ -92,6 +96,47 @@ function ScreenRouter() {
 function App() {
   const currentScreen = useStore((s) => s.currentScreen);
   const showReviewPrompt = useStore((s) => s.showReviewPrompt);
+  const setUser = useStore((s) => s.setUser);
+  const navigate = useStore((s) => s.navigate);
+  const theme = useStore((s) => s.theme);
+
+  // Aplicar tema al DOM
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
+
+  // Verificar autenticación al iniciar
+  useEffect(() => {
+    const checkAuth = async () => {
+      // Si Supabase no está configurado, saltar verificación
+      if (!isSupabaseConfigured) {
+        console.log('ℹ️ Supabase no configurado, modo sin autenticación');
+        return;
+      }
+
+      try {
+        const user = await getCurrentUser();
+        if (user) {
+          const profile = await getUserProfile(user.id);
+          if (profile) {
+            setUser(profile);
+            console.log('✅ Usuario autenticado:', profile.email);
+            if (currentScreen === 'SplashScreen' || currentScreen === 'LandingScreen') {
+              setTimeout(() => {
+                navigate('HomeScreen');
+              }, 2000);
+            }
+          }
+        } else {
+          console.log('ℹ️ No hay usuario autenticado');
+        }
+      } catch (error) {
+        console.error('Error verificando autenticación:', error);
+      }
+    };
+
+    checkAuth();
+  }, []);
 
   const showNav = TAB_ROOT_SCREENS.includes(currentScreen);
   const isOnboarding = ONBOARDING_SCREENS.includes(currentScreen);

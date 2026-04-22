@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { openaiPost } from './openai';
 
 const OPENAI_KEY = import.meta.env.VITE_OPENAI_API_KEY;
 const NEWS_KEY = import.meta.env.VITE_NEWS_API_KEY;
@@ -235,25 +236,15 @@ REGLAS CRÍTICAS:
 10. volatilityWarning = true solo para eventos de ALTA volatilidad (FOMC, NFP, earnings, etc.)`;
 
   try {
-    const res = await axios.post(
-      '/api/openai/v1/chat/completions',
-      {
-        model: 'gpt-4o',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.15,
-        max_tokens: 3000,
-        response_format: { type: 'json_object' },
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${OPENAI_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        timeout: 45000,
-      }
-    );
+    const data = await openaiPost({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.15,
+      max_tokens: 3000,
+      response_format: { type: 'json_object' },
+    }, 45000);
 
-    const parsed = JSON.parse(res.data.choices[0].message.content);
+    const parsed = JSON.parse(data.choices[0].message.content);
     return parsed.signals || [];
   } catch (error) {
     console.error('Error analyzing news with GPT:', error);

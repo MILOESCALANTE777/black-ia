@@ -40,15 +40,61 @@ interface VisionAnalysis {
 
 // ─── GPT-4o Vision call ───────────────────────────────────────────────────────
 
-async function analyzeChartImage(base64Image: string, symbol: string): Promise<VisionAnalysis> {
+async function analyzeChartImage(
+  base64Image: string, 
+  symbol: string,
+  userProfile?: any
+): Promise<VisionAnalysis> {
   // Verificar que la API key esté configurada
   if (!OPENAI_KEY || OPENAI_KEY === 'undefined') {
     throw new Error('API key de OpenAI no configurada. Verifica tu archivo .env');
   }
 
+  // Construir contexto del usuario si está disponible
+  let userContext = '';
+  if (userProfile) {
+    const experienceLabels = {
+      beginner: 'Principiante',
+      intermediate: 'Intermedio',
+      advanced: 'Avanzado',
+      expert: 'Experto'
+    };
+    
+    const styleLabels = {
+      scalper: 'Scalper (operaciones de segundos/minutos)',
+      day_trader: 'Day Trader (operaciones intradía)',
+      swing_trader: 'Swing Trader (operaciones de días/semanas)',
+      position_trader: 'Position Trader (operaciones de largo plazo)'
+    };
+    
+    const riskLabels = {
+      conservative: 'Conservador (1-2% por trade)',
+      moderate: 'Moderado (2-3% por trade)',
+      aggressive: 'Agresivo (3-5% por trade)'
+    };
+
+    userContext = `
+
+PERFIL DEL TRADER:
+- Nivel de experiencia: ${experienceLabels[userProfile.experience_level as keyof typeof experienceLabels] || userProfile.experience_level}
+- Estilo de trading: ${styleLabels[userProfile.trading_style as keyof typeof styleLabels] || userProfile.trading_style}
+- Mercados preferidos: ${userProfile.preferred_markets?.join(', ') || 'Todos'}
+- Tolerancia al riesgo: ${riskLabels[userProfile.risk_tolerance as keyof typeof riskLabels] || userProfile.risk_tolerance}
+- Timeframes preferidos: ${userProfile.preferred_timeframes?.join(', ') || '1h, 4h'}
+- Riesgo máximo por trade: ${userProfile.max_risk_per_trade || 2}%
+- Ratio R:R preferido: 1:${userProfile.preferred_rr_ratio || 2}
+
+IMPORTANTE: Adapta tu análisis y estrategias específicamente para este perfil de trader. 
+- Si es principiante: usa lenguaje simple, explica conceptos, estrategias conservadoras
+- Si es avanzado/experto: usa terminología técnica avanzada, estrategias complejas
+- Respeta su estilo de trading y timeframes preferidos
+- Ajusta los stops y targets según su tolerancia al riesgo
+- Asegúrate que el R:R sea al menos el que prefiere`;
+  }
+
   const prompt = `Eres un analista técnico experto de nivel institucional. Analiza esta imagen de gráfico de trading con MÁXIMO detalle.
 
-ACTIVO: ${symbol || 'Desconocido'}
+ACTIVO: ${symbol || 'Desconocido'}${userContext}
 
 Analiza TODOS estos elementos que puedas ver en el gráfico:
 
@@ -113,8 +159,8 @@ Responde ÚNICAMENTE en este JSON exacto (sin texto adicional):
     console.log('🔍 Iniciando análisis de imagen...');
     console.log('📊 Activo:', symbol || 'Desconocido');
     console.log('🔑 API Key configurada:', OPENAI_KEY ? 'Sí' : 'No');
-    
-    const res = await axios.post('/api/openai/v1/chat/completions', {
+
+    const body = {
       model: 'gpt-4o',
       messages: [{
         role: 'user',
@@ -126,13 +172,25 @@ Responde ÚNICAMENTE en este JSON exacto (sin texto adicional):
       temperature: 0.2,
       max_tokens: 2000,
       response_format: { type: 'json_object' },
-    }, {
-      headers: { 
-        'Authorization': `Bearer ${OPENAI_KEY}`, 
-        'Content-Type': 'application/json' 
-      },
-      timeout: 60000, // Aumentado a 60 segundos
-    });
+    };
+
+    const headers = {
+      'Authorization': `Bearer ${OPENAI_KEY}`,
+      'Content-Type': 'application/json',
+    };
+
+    let res;
+    try {
+      // Intentar primero con proxy (producción)
+      res = await axios.post('/api/openai/v1/chat/completions', body, { headers, timeout: 60000 });
+    } catch (proxyErr: any) {
+      // Si proxy falla, llamar directo (desarrollo)
+      if (proxyErr.response?.status === 404 || proxyErr.code === 'ERR_NETWORK' || proxyErr.message?.includes('404')) {
+        res = await axios.post('https://api.openai.com/v1/chat/completions', body, { headers, timeout: 60000 });
+      } else {
+        throw proxyErr;
+      }
+    }
 
     console.log('✅ Respuesta recibida de OpenAI');
     
@@ -379,6 +437,7 @@ function AnalysisResult({ result, onReset }: { result: VisionAnalysis; onReset: 
 export default function AnalyzeScreen() {
   const setActiveTab = useStore((s) => s.setActiveTab);
   const setCapturedImage = useStore((s) => s.setCapturedImage);
+  const user = useStore((s) => s.user);
 
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [base64Image, setBase64Image] = useState<string | null>(null);
@@ -416,9 +475,31 @@ export default function AnalyzeScreen() {
     
     try {
       console.log('🚀 Iniciando análisis...');
-      const result = await analyzeChartImage(base64Image, symbol);
+      console.log('👤 Usuario:', user ? user.email : 'No autenticado');
+      
+      // Pasar el perfil del usuario al análisis
+      const result = await analyzeChartImage(base64Image, symbol, user);
       console.log('✅ Análisis completado:', result);
       setAnalysisResult(result);
+      
+      // Guardar análisis en historial si el usuario está autenticado
+      if (user) {
+        try {
+          const { saveAnalysis } = await import('@/lib/supabase');
+          await saveAnalysis(user.id, {
+            asset: result.symbol || symbol || 'Desconocido',
+            timeframe: result.timeframe || '1h',
+            bias: result.bias,
+            confidence: result.biasStrength,
+            strategies: result.strategies,
+            analysis_type: 'image',
+          });
+          console.log('✅ Análisis guardado en historial');
+        } catch (historyError) {
+          console.error('⚠️ Error guardando en historial:', historyError);
+          // No mostrar error al usuario, el análisis ya se completó
+        }
+      }
     } catch (err: any) {
       console.error('❌ Error capturado en handleAnalyze:', err);
       

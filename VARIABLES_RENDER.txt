@@ -1,0 +1,8 @@
+# Variables de entorno para Render.com
+# Agregar estas en: Dashboard → black-ia → Environment
+
+VITE_OPENAI_API_KEY=sk-...tu-key-aqui...
+VITE_TWELVE_DATA_API_KEY=tu-key-aqui
+VITE_NEWS_API_KEY=tu-key-aqui
+VITE_SUPABASE_URL=https://irakfezigymxnwjescyu.supabase.co
+VITE_SUPABASE_ANON_KEY=tu-anon-key-aqui

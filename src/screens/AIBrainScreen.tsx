@@ -1,9 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Send, Brain, Zap, Trash2 } from 'lucide-react';
-import axios from 'axios';
-
-const OPENAI_KEY = import.meta.env.VITE_OPENAI_API_KEY;
+import { openaiPost } from '@/lib/openai';
 
 interface Message {
   id: number;
@@ -32,26 +30,16 @@ const SYSTEM_PROMPT = `Eres un asistente experto en trading e inversiones llamad
 Responde siempre en español, de forma concisa y accionable. Cuando des señales incluye: dirección (LONG/SHORT), entrada, stop loss y take profit. Usa emojis con moderación para hacer las respuestas más legibles.`;
 
 async function askGPT(messages: { role: string; content: string }[]): Promise<string> {
-  const res = await axios.post(
-    '/api/openai/v1/chat/completions',
-    {
-      model: 'gpt-4o',
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        ...messages,
-      ],
-      temperature: 0.4,
-      max_tokens: 600,
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${OPENAI_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      timeout: 30000,
-    }
-  );
-  return res.data.choices[0].message.content;
+  const data = await openaiPost({
+    model: 'gpt-4o',
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      ...messages,
+    ],
+    temperature: 0.4,
+    max_tokens: 600,
+  }, 30000);
+  return data.choices[0].message.content;
 }
 
 const INITIAL_MESSAGE: Message = {

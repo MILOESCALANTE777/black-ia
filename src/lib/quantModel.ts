@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { openaiPost } from './openai';
 
 const TWELVE_KEY = import.meta.env.VITE_TWELVE_DATA_API_KEY;
 const OPENAI_KEY = import.meta.env.VITE_OPENAI_API_KEY;
@@ -571,17 +572,14 @@ Responde en JSON:
 }`;
 
   try {
-    const res = await axios.post('/api/openai/v1/chat/completions', {
+    const data = await openaiPost({
       model: 'gpt-4o',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.2,
       max_tokens: 400,
       response_format: { type: 'json_object' },
-    }, {
-      headers: { Authorization: `Bearer ${OPENAI_KEY}`, 'Content-Type': 'application/json' },
-      timeout: 25000,
-    });
-    return JSON.parse(res.data.choices[0].message.content);
+    }, 25000);
+    return JSON.parse(data.choices[0].message.content);
   } catch {
     return {
       summary: 'Modelo cuantitativo activo. Monitoreando anomalias en rendimientos logaritmicos con umbral ±2.5σ.',

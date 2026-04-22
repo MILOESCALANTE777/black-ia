@@ -16,7 +16,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
-import { analyzeNewsSignals, NewsSignal, NewsSignalsResponse } from '@/lib/newsSignals';
+import { analyzeNewsSignals, type NewsSignal, type NewsSignalsResponse } from '@/lib/newsSignals';
 
 // ─── Asset selector ───────────────────────────────────────────────────────────
 

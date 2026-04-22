@@ -40,13 +40,13 @@ export default function LandingScreen() {
         className="px-6 pb-8 flex flex-col gap-3"
       >
         <button
-          onClick={() => navigate('OnboardingFeaturesScreen')}
+          onClick={() => navigate('AuthScreen')}
           className="w-full py-4 rounded-full bg-[#1C1C1E] border border-[#38383A] text-white font-semibold text-base active:scale-[0.98] transition-transform"
         >
           I have an account
         </button>
         <button
-          onClick={() => navigate('OnboardingFeaturesScreen')}
+          onClick={() => navigate('AuthScreen')}
           className="w-full py-4 rounded-full bg-white text-black font-semibold text-base active:scale-[0.98] transition-transform"
         >
           Continue

@@ -1,4 +1,61 @@
 import { create } from 'zustand';
+import type { UserProfile } from '@/lib/supabase';
+
+// ─── Traducciones ─────────────────────────────────────────────────────────────
+export const translations = {
+  es: {
+    // Nav
+    home: 'Inicio', quant: 'Quant', aiBrain: 'IA Brain', analyze: 'Analizar',
+    markets: 'Mercados', profile: 'Perfil',
+    // Profile
+    profileTitle: 'Perfil', editProfile: 'Editar Perfil',
+    tradingPreferences: 'Preferencias de Trading', notifications: 'Notificaciones',
+    theme: 'Tema', language: 'Idioma', soundEffects: 'Efectos de Sonido',
+    helpCenter: 'Centro de Ayuda', contactUs: 'Contáctanos', rateApp: 'Calificar App',
+    privacyPolicy: 'Política de Privacidad', termsOfService: 'Términos de Servicio',
+    signOut: 'Cerrar Sesión', tradingJournal: 'Diario de Trading',
+    trackPerformance: 'Rastrea tu rendimiento', analysisHistory: 'Historial de Análisis',
+    analysesCount: 'análisis realizados', noAnalysisYet: 'Sin análisis aún',
+    analyzeFirstChart: 'Analiza tu primer gráfico para verlo aquí',
+    account: 'Cuenta', app: 'Aplicación', support: 'Soporte', legal: 'Legal',
+    bullish: 'Alcista', bearish: 'Bajista', neutral: 'Neutral',
+    // Theme
+    darkTheme: 'Tema Oscuro', lightTheme: 'Tema Claro',
+    // Analyze
+    analyzeChart: 'Analizar Gráfico', analyzeWithAI: 'Analizar con GPT-4o',
+    uploadImage: 'Seleccionar imagen', assetOptional: 'Activo (opcional)',
+    analyzing: 'Analizando gráfico con GPT-4o',
+    // Markets
+    marketsTitle: 'Mercados',
+    // Home
+    homeTitle: 'Inicio',
+  },
+  en: {
+    home: 'Home', quant: 'Quant', aiBrain: 'AI Brain', analyze: 'Analyze',
+    markets: 'Markets', profile: 'Profile',
+    profileTitle: 'Profile', editProfile: 'Edit Profile',
+    tradingPreferences: 'Trading Preferences', notifications: 'Notifications',
+    theme: 'Theme', language: 'Language', soundEffects: 'Sound Effects',
+    helpCenter: 'Help Center', contactUs: 'Contact Us', rateApp: 'Rate App',
+    privacyPolicy: 'Privacy Policy', termsOfService: 'Terms of Service',
+    signOut: 'Sign Out', tradingJournal: 'Trading Journal',
+    trackPerformance: 'Track your performance', analysisHistory: 'Analysis History',
+    analysesCount: 'analyses done', noAnalysisYet: 'No analyses yet',
+    analyzeFirstChart: 'Analyze your first chart to see it here',
+    account: 'Account', app: 'App', support: 'Support', legal: 'Legal',
+    bullish: 'Bullish', bearish: 'Bearish', neutral: 'Neutral',
+    darkTheme: 'Dark Theme', lightTheme: 'Light Theme',
+    analyzeChart: 'Analyze Chart', analyzeWithAI: 'Analyze with GPT-4o',
+    uploadImage: 'Select image', assetOptional: 'Asset (optional)',
+    analyzing: 'Analyzing chart with GPT-4o',
+    marketsTitle: 'Markets',
+    homeTitle: 'Home',
+  },
+} as const;
+
+export type Language = 'es' | 'en';
+export type Theme = 'dark' | 'light';
+export type TranslationKey = keyof typeof translations.es;
 
 export interface Insight {
   label: string;
@@ -49,6 +106,18 @@ export interface Trade {
 }
 
 interface AppState {
+  // User & Auth
+  user: UserProfile | null;
+  isAuthenticated: boolean;
+  setUser: (user: UserProfile | null) => void;
+
+  // Theme & Language
+  theme: Theme;
+  language: Language;
+  setTheme: (theme: Theme) => void;
+  setLanguage: (lang: Language) => void;
+  t: (key: TranslationKey) => string;
+  
   // Navigation
   currentScreen: string;
   prevScreen: string | null;
@@ -136,6 +205,24 @@ const INITIAL_ANALYSIS: AnalysisResult = {
 };
 
 export const useStore = create<AppState>((set, get) => ({
+  // User & Auth
+  user: null,
+  isAuthenticated: false,
+  setUser: (user) => set({ user, isAuthenticated: !!user }),
+
+  // Theme & Language
+  theme: 'dark',
+  language: 'es',
+  setTheme: (theme) => {
+    set({ theme });
+    document.documentElement.setAttribute('data-theme', theme);
+  },
+  setLanguage: (language) => set({ language }),
+  t: (key) => {
+    const lang = get().language;
+    return translations[lang][key] || translations.es[key] || key;
+  },
+  
   // Navigation
   currentScreen: 'SplashScreen',
   prevScreen: null,
