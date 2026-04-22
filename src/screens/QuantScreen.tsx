@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { TrendingUp, TrendingDown, RefreshCw, ChevronDown, ChevronUp, Activity, BarChart2, Newspaper } from 'lucide-react';
-import { runQuantAnalysis, type QuantAnalysis, type LogAnomalySignal, type NewsImpact } from '@/lib/quantModel';
+import { runQuantAnalysis, type QuantAnalysis, type LogAnomalySignal, type NewsImpact, type PrecisionEntry } from '@/lib/quantModel';
 import { saveAnalysis, getCurrentUser } from '@/lib/supabase';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -415,6 +415,70 @@ export default function QuantScreen() {
                     <div className="text-xs font-bold text-[#34C759]">{lastSig!.takeProfit.toLocaleString()}</div>
                   </div>
                 </div>
+              </motion.div>
+            )}
+
+            {/* ── ENTRADAS DE PRECISIÓN 5MIN (FVG + OB) ── */}
+            {analysis.precisionEntries && analysis.precisionEntries.length > 0 && (
+              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
+                className="space-y-2">
+                <div className="flex items-center gap-2 px-1">
+                  <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: '#FF9500' }} />
+                  <span className="text-xs font-bold uppercase tracking-wider" style={{ color: '#FF9500' }}>
+                    Entradas de Precisión — 5 Min
+                  </span>
+                </div>
+                {analysis.precisionEntries.map((entry, i) => {
+                  const color = entry.direction === 'LONG' ? '#34C759' : '#FF3B30';
+                  const typeColor = entry.type === 'FVG' ? '#007AFF' : '#AF52DE';
+                  return (
+                    <div key={i} className="rounded-2xl overflow-hidden"
+                      style={{ background: '#1C1C1E', border: `1px solid ${color}30` }}>
+                      {/* Header */}
+                      <div className="flex items-center justify-between px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          {entry.direction === 'LONG'
+                            ? <TrendingUp size={15} color={color} />
+                            : <TrendingDown size={15} color={color} />}
+                          <span className="text-sm font-bold" style={{ color }}>{entry.direction}</span>
+                          <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                            style={{ color: typeColor, background: typeColor + '20' }}>
+                            {entry.type === 'FVG' ? 'FVG' : 'OB'}
+                          </span>
+                          <span className="text-xs px-1.5 py-0.5 rounded-full"
+                            style={{ color: entry.strength === 'strong' ? '#34C759' : '#FF9500', background: entry.strength === 'strong' ? '#34C75920' : '#FF950020' }}>
+                            {entry.strength === 'strong' ? 'Fuerte' : 'Moderado'}
+                          </span>
+                        </div>
+                        <span className="text-xs font-bold" style={{ color: '#FF9500' }}>{entry.rr} R:R</span>
+                      </div>
+
+                      {/* Zona de entrada */}
+                      <div className="px-4 pb-2">
+                        <div className="text-xs mb-2" style={{ color: '#8E8E93' }}>
+                          Zona: {entry.entryZone.low.toLocaleString()} — {entry.entryZone.high.toLocaleString()}
+                        </div>
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="p-2 rounded-xl text-center" style={{ background: '#2C2C2E' }}>
+                            <div className="text-xs" style={{ color: '#636366' }}>Entrada</div>
+                            <div className="text-xs font-bold text-white">{entry.entry.toLocaleString()}</div>
+                          </div>
+                          <div className="p-2 rounded-xl text-center" style={{ background: 'rgba(255,59,48,0.1)' }}>
+                            <div className="text-xs text-[#FF3B30]">Stop</div>
+                            <div className="text-xs font-bold text-[#FF3B30]">{entry.stopLoss.toLocaleString()}</div>
+                          </div>
+                          <div className="p-2 rounded-xl text-center" style={{ background: 'rgba(52,199,89,0.1)' }}>
+                            <div className="text-xs text-[#34C759]">Target</div>
+                            <div className="text-xs font-bold text-[#34C759]">{entry.takeProfit.toLocaleString()}</div>
+                          </div>
+                        </div>
+                        <p className="text-xs mt-2 leading-relaxed" style={{ color: '#636366' }}>
+                          {entry.description}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
               </motion.div>
             )}
 

@@ -71,6 +71,23 @@ export interface QuantAnalysis {
   lastUpdated: string;
   isMarketOpen: boolean;
   nyTime: string;
+  // Entradas de precisión en 5min
+  precisionEntries: PrecisionEntry[];
+}
+
+// ─── Precision Entry Types (5min FVG + Order Block) ──────────────────────────
+
+export interface PrecisionEntry {
+  type: 'FVG' | 'ORDER_BLOCK';
+  direction: 'LONG' | 'SHORT';
+  entryZone: { high: number; low: number };
+  entry: number;       // mid del zone
+  stopLoss: number;
+  takeProfit: number;
+  rr: string;
+  strength: 'strong' | 'moderate';
+  timestamp: string;
+  description: string;
 }
 
 // ─── Model config (optimal params from README) ────────────────────────────────
@@ -592,6 +609,147 @@ Responde en JSON:
   }
 }
 
+// ─── Precision Entries: FVG + Order Block en 5min ────────────────────────────
+
+function detectFVGs(candles: QuantCandle[], direction: 'LONG' | 'SHORT'): PrecisionEntry[] {
+  // FVG (Fair Value Gap): 3 velas donde hay un gap entre vela[0].high y vela[2].low (alcista)
+  // o entre vela[0].low y vela[2].high (bajista)
+  const reversed = [...candles].reverse(); // oldest first
+  const entries: PrecisionEntry[] = [];
+
+  for (let i = 2; i < Math.min(reversed.length, 30); i++) {
+    const c0 = reversed[i - 2]; // primera vela
+    const c2 = reversed[i];     // tercera vela
+
+    if (direction === 'LONG') {
+      // FVG alcista: gap entre high de c0 y low de c2
+      const gapHigh = c2.low;
+      const gapLow  = c0.high;
+      if (gapHigh > gapLow) {
+        const mid = (gapHigh + gapLow) / 2;
+        const atr = reversed.slice(Math.max(0, i - 10), i).reduce((s, c) => s + (c.high - c.low), 0) / 10;
+        entries.push({
+          type: 'FVG',
+          direction: 'LONG',
+          entryZone: { high: gapHigh, low: gapLow },
+          entry: parseFloat(mid.toFixed(2)),
+          stopLoss: parseFloat((gapLow - atr * 0.5).toFixed(2)),
+          takeProfit: parseFloat((mid + (mid - (gapLow - atr * 0.5)) * 2).toFixed(2)),
+          rr: '1:2',
+          strength: (gapHigh - gapLow) > atr * 0.5 ? 'strong' : 'moderate',
+          timestamp: c2.datetime,
+          description: `FVG alcista en zona ${gapLow.toFixed(2)}-${gapHigh.toFixed(2)}. Precio puede retroceder a llenar el gap antes de continuar al alza.`,
+        });
+      }
+    } else {
+      // FVG bajista: gap entre low de c0 y high de c2
+      const gapLow  = c2.high;
+      const gapHigh = c0.low;
+      if (gapHigh > gapLow) {
+        const mid = (gapHigh + gapLow) / 2;
+        const atr = reversed.slice(Math.max(0, i - 10), i).reduce((s, c) => s + (c.high - c.low), 0) / 10;
+        entries.push({
+          type: 'FVG',
+          direction: 'SHORT',
+          entryZone: { high: gapHigh, low: gapLow },
+          entry: parseFloat(mid.toFixed(2)),
+          stopLoss: parseFloat((gapHigh + atr * 0.5).toFixed(2)),
+          takeProfit: parseFloat((mid - (gapHigh + atr * 0.5 - mid) * 2).toFixed(2)),
+          rr: '1:2',
+          strength: (gapHigh - gapLow) > atr * 0.5 ? 'strong' : 'moderate',
+          timestamp: c2.datetime,
+          description: `FVG bajista en zona ${gapLow.toFixed(2)}-${gapHigh.toFixed(2)}. Precio puede retroceder a llenar el gap antes de continuar a la baja.`,
+        });
+      }
+    }
+  }
+
+  return entries.slice(0, 3); // máximo 3 FVGs
+}
+
+function detectOrderBlocks(candles: QuantCandle[], direction: 'LONG' | 'SHORT'): PrecisionEntry[] {
+  // Order Block: última vela bajista antes de un movimiento alcista fuerte (OB alcista)
+  // o última vela alcista antes de un movimiento bajista fuerte (OB bajista)
+  const reversed = [...candles].reverse(); // oldest first
+  const entries: PrecisionEntry[] = [];
+
+  for (let i = 3; i < Math.min(reversed.length, 40); i++) {
+    const ob   = reversed[i - 2]; // vela del order block
+    const next = reversed[i - 1]; // vela siguiente
+    const curr = reversed[i];     // vela actual
+
+    const obSize   = Math.abs(ob.close - ob.open);
+    const nextSize = Math.abs(next.close - next.open);
+    const atr = reversed.slice(Math.max(0, i - 14), i).reduce((s, c) => s + (c.high - c.low), 0) / 14;
+
+    if (direction === 'LONG') {
+      // OB alcista: vela bajista seguida de movimiento alcista fuerte
+      const isBearishOB = ob.close < ob.open;
+      const isStrongMove = next.close > next.open && nextSize > obSize * 1.5;
+      if (isBearishOB && isStrongMove) {
+        const obHigh = ob.high;
+        const obLow  = ob.low;
+        const mid    = (obHigh + obLow) / 2;
+        entries.push({
+          type: 'ORDER_BLOCK',
+          direction: 'LONG',
+          entryZone: { high: obHigh, low: obLow },
+          entry: parseFloat(mid.toFixed(2)),
+          stopLoss: parseFloat((obLow - atr * 0.3).toFixed(2)),
+          takeProfit: parseFloat((mid + (mid - (obLow - atr * 0.3)) * 2.5).toFixed(2)),
+          rr: '1:2.5',
+          strength: nextSize > obSize * 2 ? 'strong' : 'moderate',
+          timestamp: ob.datetime,
+          description: `Order Block alcista en ${obLow.toFixed(2)}-${obHigh.toFixed(2)}. Zona de demanda institucional. Esperar retroceso a esta zona para entrar LONG.`,
+        });
+      }
+    } else {
+      // OB bajista: vela alcista seguida de movimiento bajista fuerte
+      const isBullishOB = ob.close > ob.open;
+      const isStrongMove = next.close < next.open && nextSize > obSize * 1.5;
+      if (isBullishOB && isStrongMove) {
+        const obHigh = ob.high;
+        const obLow  = ob.low;
+        const mid    = (obHigh + obLow) / 2;
+        entries.push({
+          type: 'ORDER_BLOCK',
+          direction: 'SHORT',
+          entryZone: { high: obHigh, low: obLow },
+          entry: parseFloat(mid.toFixed(2)),
+          stopLoss: parseFloat((obHigh + atr * 0.3).toFixed(2)),
+          takeProfit: parseFloat((mid - (obHigh + atr * 0.3 - mid) * 2.5).toFixed(2)),
+          rr: '1:2.5',
+          strength: nextSize > obSize * 2 ? 'strong' : 'moderate',
+          timestamp: ob.datetime,
+          description: `Order Block bajista en ${obLow.toFixed(2)}-${obHigh.toFixed(2)}. Zona de oferta institucional. Esperar retroceso a esta zona para entrar SHORT.`,
+        });
+      }
+    }
+  }
+
+  return entries.slice(0, 3); // máximo 3 OBs
+}
+
+async function fetchPrecisionEntries(symbol: string, mainDirection: 'LONG' | 'SHORT' | 'NONE'): Promise<PrecisionEntry[]> {
+  if (mainDirection === 'NONE') return [];
+
+  try {
+    // Obtener velas de 5min para entradas de precisión
+    const candles5m = await fetchQuantCandles(symbol, '5min' as any, 60);
+    if (candles5m.length < 10) return [];
+
+    const fvgs = detectFVGs(candles5m, mainDirection);
+    const obs  = detectOrderBlocks(candles5m, mainDirection);
+
+    // Combinar y ordenar por timestamp (más recientes primero)
+    return [...fvgs, ...obs]
+      .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+      .slice(0, 4); // máximo 4 entradas de precisión
+  } catch {
+    return [];
+  }
+}
+
 // ─── Main export ──────────────────────────────────────────────────────────────
 
 export async function runQuantAnalysis(symbol = 'SPX'): Promise<QuantAnalysis> {
@@ -601,10 +759,9 @@ export async function runQuantAnalysis(symbol = 'SPX'): Promise<QuantAnalysis> {
     'EUR/USD': 'Euro / Dólar', 'GBP/USD': 'Libra / Dólar', 'USD/JPY': 'Dólar / Yen',
   };
   const assetName = assetNames[symbol] || symbol;
-
   const nyInfo = getNYTime();
 
-  // Fetch data in parallel
+  // Fetch datos en paralelo — siempre en 15min sin restricción de horario
   const [priceData, candles15m] = await Promise.all([
     fetchCurrentPrice(symbol),
     fetchQuantCandles(symbol, '15min', 100),
@@ -612,22 +769,25 @@ export async function runQuantAnalysis(symbol = 'SPX'): Promise<QuantAnalysis> {
 
   const { price: currentPrice, change, pct } = priceData;
 
-  // Run log-anomaly model
+  // Correr modelo Log-Anomaly en 15min
   const signals = candles15m.length >= MODEL_CONFIG.window + MODEL_CONFIG.minPeriods
     ? runLogAnomalyModel(candles15m)
     : [];
 
-  // Persist new signals to localStorage history
-  if (signals.length > 0) {
-    saveSignalsToHistory(symbol, signals);
-  }
+  if (signals.length > 0) saveSignalsToHistory(symbol, signals);
 
   const metrics = calcMetrics(signals, candles15m.length);
 
-  // Fetch news
-  const newsImpacts = await fetchNewsImpacts(symbol);
+  // Dirección principal de la última señal
+  const mainDirection = metrics.lastSignal?.direction || 'NONE';
 
-  // GPT-4o summary
+  // Fetch en paralelo: noticias + entradas de precisión en 5min (FVG + OB)
+  const [newsImpacts, precisionEntries] = await Promise.all([
+    fetchNewsImpacts(symbol),
+    fetchPrecisionEntries(symbol, mainDirection),
+  ]);
+
+  // Resumen IA
   const aiResult = await generateAISummary({
     symbol, assetName, currentPrice, metrics, newsImpacts,
     isMarketOpen: nyInfo.isMarketOpen, nyTime: nyInfo.timeStr,
@@ -641,6 +801,7 @@ export async function runQuantAnalysis(symbol = 'SPX'): Promise<QuantAnalysis> {
     signals,
     metrics,
     newsImpacts,
+    precisionEntries,
     aiSummary: aiResult.summary,
     marketRegime: aiResult.regime,
     nextSignalWindow: getNextSignalWindow(),
