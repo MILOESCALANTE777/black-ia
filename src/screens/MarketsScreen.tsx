@@ -547,12 +547,35 @@ function SignalsPanel({ symbol }: { symbol: string }) {
 function QuantSignalsPanel({ symbol, assetName }: { symbol: string; assetName: string }) {
   const [qAnalysis, setQAnalysis] = useState<QuantAnalysis | null>(null);
   const [loading, setLoading] = useState(false);
+  const [signalExpiry, setSignalExpiry] = useState(0);
+
+  // Cronómetro de vigencia
+  const [expirySecs, setExpirySecs] = useState(0);
+  useEffect(() => {
+    setExpirySecs(signalExpiry);
+    const t = setInterval(() => setExpirySecs(s => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(t);
+  }, [signalExpiry]);
+  const fmtExpiry = (s: number) => {
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+    if (h > 0) return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+    return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+  };
+  const fmtTime = (dt: string) => {
+    try {
+      const d = new Date(dt);
+      return d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/New_York' }) + ' NY';
+    } catch { return dt; }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const result = await runQuantAnalysis(symbol);
       setQAnalysis(result);
+      if (result.metrics.lastSignal?.direction !== 'NONE') {
+        setSignalExpiry(8 * 15 * 60); // 8 barras × 15min por defecto
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -560,117 +583,179 @@ function QuantSignalsPanel({ symbol, assetName }: { symbol: string; assetName: s
     }
   }, [symbol]);
 
-  useEffect(() => {
-    load();
-    const iv = setInterval(load, 15 * 60 * 1000);
-    return () => clearInterval(iv);
-  }, [load]);
+  // NO carga automáticamente — solo cuando el usuario presiona el botón
+  const lastSig = qAnalysis?.metrics.lastSignal;
+  const lastColor = lastSig?.direction === 'LONG' ? '#34C759' : lastSig?.direction === 'SHORT' ? '#FF3B30' : '#636366';
+  const hasSignal = lastSig && lastSig.direction !== 'NONE';
 
+  // Estado inicial — sin análisis
+  if (!qAnalysis && !loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-10 gap-4">
+        <div className="w-14 h-14 rounded-2xl flex items-center justify-center"
+          style={{ background: 'linear-gradient(135deg, #AF52DE20, #007AFF20)', border: '1px solid #38383A' }}>
+          <BarChart2 size={24} color="#AF52DE" />
+        </div>
+        <div className="text-center">
+          <p className="text-sm font-semibold text-white mb-1">Análisis Cuantitativo</p>
+          <p className="text-xs text-[#636366]">Detecta anomalías estadísticas ±2.5σ</p>
+        </div>
+        <button onClick={load}
+          className="flex items-center gap-2 px-6 py-3 rounded-full font-bold text-sm text-white transition-all active:scale-95"
+          style={{ background: 'linear-gradient(135deg, #AF52DE, #007AFF)' }}>
+          <Zap size={15} />
+          Analizar Ahora
+        </button>
+      </div>
+    );
+  }
+
+  // Loading
   if (loading && !qAnalysis) {
     return (
       <div className="flex flex-col items-center justify-center py-10 gap-3">
         <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}>
           <BarChart2 size={24} color="#AF52DE" />
         </motion.div>
-        <p className="text-xs text-[#636366]">Ejecutando modelo Log-Anomaly...</p>
+        <p className="text-xs text-[#636366]">Calculando anomalías Log-Anomaly ±2.5σ...</p>
       </div>
     );
   }
 
   if (!qAnalysis) return null;
 
-  const lastSig = qAnalysis.metrics.lastSignal;
-  const lastColor = lastSig?.direction === 'LONG' ? '#34C759' : lastSig?.direction === 'SHORT' ? '#FF3B30' : '#636366';
-
   return (
     <div className="space-y-3">
-      {/* Summary */}
-      <div className="p-4 rounded-2xl" style={{ background: '#1C1C1E', border: '1px solid #38383A' }}>
-        <div className="flex items-center gap-2 mb-2">
-          <Zap size={13} color="#AF52DE" />
-          <span className="text-xs font-bold text-[#AF52DE] uppercase tracking-wider">Modelo Cuant — Log Anomaly ±2.5σ</span>
-          <button onClick={load} className="ml-auto">
-            <RefreshCw size={11} color="#636366" className={loading ? 'animate-spin' : ''} />
+
+      {/* ── SEÑAL ACTIVA + CRONÓMETRO ── */}
+      {hasSignal && (
+        <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
+          className="p-4 rounded-2xl"
+          style={{ background: lastColor + '10', border: `1px solid ${lastColor}35` }}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center"
+                style={{ background: lastColor + '20' }}>
+                {lastSig!.direction === 'LONG'
+                  ? <TrendingUp size={18} color={lastColor} />
+                  : <TrendingDown size={18} color={lastColor} />}
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-base font-black" style={{ color: lastColor }}>{lastSig!.direction}</span>
+                  <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: lastColor }} />
+                </div>
+                <span className="text-xs font-mono" style={{ color: '#8E8E93' }}>
+                  🕐 {fmtTime(lastSig!.timestamp)}
+                </span>
+              </div>
+            </div>
+            {/* Cronómetro */}
+            {expirySecs > 0 && (
+              <div className="text-right">
+                <div className="text-xs text-[#636366] mb-0.5">Vigencia</div>
+                <div className="font-mono font-black text-xl leading-none"
+                  style={{ color: expirySecs < 300 ? '#FF3B30' : expirySecs < 900 ? '#FF9500' : lastColor }}>
+                  {fmtExpiry(expirySecs)}
+                </div>
+              </div>
+            )}
+          </div>
+          {/* Precios */}
+          <div className="grid grid-cols-3 gap-2">
+            <div className="p-2.5 rounded-xl text-center" style={{ background: '#00000030' }}>
+              <div className="text-xs text-[#636366]">Entrada</div>
+              <div className="text-sm font-black text-white">{lastSig!.entryPrice.toLocaleString()}</div>
+            </div>
+            <div className="p-2.5 rounded-xl text-center" style={{ background: 'rgba(255,59,48,0.12)' }}>
+              <div className="text-xs text-[#FF3B30]">Stop</div>
+              <div className="text-sm font-black text-[#FF3B30]">{lastSig!.stopLoss.toLocaleString()}</div>
+            </div>
+            <div className="p-2.5 rounded-xl text-center" style={{ background: 'rgba(52,199,89,0.12)' }}>
+              <div className="text-xs text-[#34C759]">Target</div>
+              <div className="text-sm font-black text-[#34C759]">{lastSig!.takeProfit.toLocaleString()}</div>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
+      {/* ── RESUMEN IA ── */}
+      <div className="p-4 rounded-2xl" style={{ background: '#1C1C1E', border: '1px solid #2C2C2E' }}>
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <Zap size={12} color="#AF52DE" />
+            <span className="text-xs font-bold text-[#AF52DE] uppercase tracking-wider">Log Anomaly ±2.5σ</span>
+          </div>
+          <button onClick={load} disabled={loading}
+            className="w-7 h-7 rounded-full flex items-center justify-center transition-all active:scale-90"
+            style={{ background: loading ? '#2C2C2E' : 'linear-gradient(135deg, #AF52DE, #007AFF)' }}>
+            <RefreshCw size={11} color="#FFFFFF" className={loading ? 'animate-spin' : ''} />
           </button>
         </div>
         <p className="text-xs text-[#8E8E93] leading-relaxed">{qAnalysis.aiSummary}</p>
-        <div className="flex items-center gap-2 mt-2 text-xs text-[#636366]">
-          <Clock size={10} />
-          <span>Proxima señal: {qAnalysis.nextSignalWindow}</span>
+        <div className="flex items-center justify-between mt-2">
+          <span className="text-xs text-[#636366]">
+            {qAnalysis.isMarketOpen ? '● Abierto' : '○ Cerrado'} · {qAnalysis.nyTime} NY
+          </span>
+          <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+            style={{
+              color: { trending_up: '#34C759', trending_down: '#FF3B30', ranging: '#FF9500', volatile: '#AF52DE' }[qAnalysis.marketRegime] || '#FF9500',
+              background: ({ trending_up: '#34C75920', trending_down: '#FF3B3020', ranging: '#FF950020', volatile: '#AF52DE20' }[qAnalysis.marketRegime] || '#FF950020'),
+            }}>
+            {{ trending_up: 'Alcista', trending_down: 'Bajista', ranging: 'Lateral', volatile: 'Volátil' }[qAnalysis.marketRegime] || qAnalysis.marketRegime}
+          </span>
         </div>
       </div>
 
-      {/* Last signal */}
-      {lastSig && lastSig.direction !== 'NONE' && (
-        <div className="p-4 rounded-2xl" style={{ background: '#1C1C1E', border: `1px solid ${lastColor}40` }}>
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              {lastSig.direction === 'LONG' ? <TrendingUp size={15} color={lastColor} /> : <TrendingDown size={15} color={lastColor} />}
-              <span className="text-sm font-bold" style={{ color: lastColor }}>Ultima Señal: {lastSig.direction}</span>
-            </div>
-            <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ color: lastColor, background: lastColor + '20' }}>
-              {Math.round(lastSig.signalStrength * 100)}% fuerza
-            </span>
-          </div>
-          <div className="text-xs text-[#636366] mb-2">{lastSig.timestamp} | Z={lastSig.zScore.toFixed(2)} | p={lastSig.pValue.toFixed(4)}</div>
-          <div className="grid grid-cols-3 gap-2">
-            <div className="text-center p-2 rounded-xl" style={{ background: '#2C2C2E' }}>
-              <span className="text-xs text-[#636366] block">Entrada</span>
-              <span className="text-xs font-bold text-white">{lastSig.entryPrice.toLocaleString()}</span>
-            </div>
-            <div className="text-center p-2 rounded-xl" style={{ background: 'rgba(255,59,48,0.1)' }}>
-              <span className="text-xs text-[#FF3B30] block">SL</span>
-              <span className="text-xs font-bold text-[#FF3B30]">{lastSig.stopLoss.toLocaleString()}</span>
-            </div>
-            <div className="text-center p-2 rounded-xl" style={{ background: 'rgba(52,199,89,0.1)' }}>
-              <span className="text-xs text-[#34C759] block">TP Media</span>
-              <span className="text-xs font-bold text-[#34C759]">{lastSig.takeProfit.toLocaleString()}</span>
-            </div>
-          </div>
+      {/* ── SEÑALES ACTUALES ── */}
+      {qAnalysis.signals.length === 0 && (
+        <div className="text-center py-6 rounded-2xl" style={{ background: '#1C1C1E', border: '1px solid #2C2C2E' }}>
+          <p className="text-sm text-[#636366]">Sin anomalías detectadas</p>
+          <p className="text-xs text-[#38383A] mt-1">|Z-Score| {'<'} 2.5σ en las últimas 30 barras</p>
         </div>
       )}
 
-      {/* Recent signals list */}
-      {qAnalysis.metrics.recentSignals.length > 0 && (
-        <div className="p-4 rounded-2xl" style={{ background: '#1C1C1E', border: '1px solid #38383A' }}>
-          <span className="text-xs font-bold text-[#636366] uppercase tracking-wider block mb-3">Ultimas 5 Anomalias</span>
-          <div className="space-y-2">
-            {qAnalysis.metrics.recentSignals.map((sig, i) => {
+      {qAnalysis.signals.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-bold text-[#34C759] uppercase tracking-wider px-1">
+            {qAnalysis.signals.length} señal{qAnalysis.signals.length > 1 ? 'es' : ''} detectada{qAnalysis.signals.length > 1 ? 's' : ''}
+          </p>
+          {[...qAnalysis.signals]
+            .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+            .slice(0, 5)
+            .map((sig, i) => {
               const c = sig.direction === 'LONG' ? '#34C759' : sig.direction === 'SHORT' ? '#FF3B30' : '#636366';
               return (
-                <div key={i} className="flex items-center justify-between py-1.5 border-b border-[#2C2C2E] last:border-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold" style={{ color: c }}>{sig.direction}</span>
-                    <span className="text-xs text-[#636366]">{sig.timestamp.split(' ')[1] || sig.timestamp}</span>
+                <div key={i} className="p-3 rounded-xl" style={{ background: '#1C1C1E', border: `1px solid ${i === 0 ? c + '40' : '#2C2C2E'}` }}>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      {sig.direction === 'LONG' ? <TrendingUp size={14} color={c} /> : <TrendingDown size={14} color={c} />}
+                      <span className="text-sm font-bold" style={{ color: c }}>{sig.direction}</span>
+                      <span className="text-xs font-mono text-[#8E8E93]">🕐 {fmtTime(sig.timestamp)}</span>
+                    </div>
+                    <span className="text-xs font-bold" style={{ color: c }}>{Math.round(sig.signalStrength * 100)}%</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-mono" style={{ color: sig.zScore > 0 ? '#FF3B30' : '#34C759' }}>
-                      {sig.zScore >= 0 ? '+' : ''}{sig.zScore.toFixed(2)}σ
-                    </span>
-                    <span className="text-xs text-[#636366]">p={sig.pValue.toFixed(4)}</span>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    <div className="p-2 rounded-lg text-center" style={{ background: '#2C2C2E' }}>
+                      <div className="text-xs text-[#636366]">Entrada</div>
+                      <div className="text-xs font-bold text-white">{sig.entryPrice.toLocaleString()}</div>
+                    </div>
+                    <div className="p-2 rounded-lg text-center" style={{ background: 'rgba(255,59,48,0.1)' }}>
+                      <div className="text-xs text-[#FF3B30]">Stop</div>
+                      <div className="text-xs font-bold text-[#FF3B30]">{sig.stopLoss.toLocaleString()}</div>
+                    </div>
+                    <div className="p-2 rounded-lg text-center" style={{ background: 'rgba(52,199,89,0.1)' }}>
+                      <div className="text-xs text-[#34C759]">Target</div>
+                      <div className="text-xs font-bold text-[#34C759]">{sig.takeProfit.toLocaleString()}</div>
+                    </div>
                   </div>
                 </div>
               );
             })}
-          </div>
         </div>
       )}
 
-      {/* Metrics */}
-      <div className="grid grid-cols-2 gap-2">
-        <div className="p-3 rounded-2xl text-center" style={{ background: '#1C1C1E', border: '1px solid #38383A' }}>
-          <span className="text-xs text-[#636366] block">Anomalias 95%</span>
-          <span className="text-xl font-black text-[#34C759]">{qAnalysis.metrics.significantSignals}</span>
-        </div>
-        <div className="p-3 rounded-2xl text-center" style={{ background: '#1C1C1E', border: '1px solid #38383A' }}>
-          <span className="text-xs text-[#636366] block">Tasa Anomalia</span>
-          <span className="text-xl font-black text-[#FF9500]">{qAnalysis.metrics.anomalyRate}%</span>
-        </div>
-      </div>
-
-      <p className="text-xs text-[#38383A] text-center leading-relaxed">
-        Señales cuant generadas a las 9:30 AM NY y cada 15 min. No constituyen asesoramiento financiero.
-      </p>
+      <p className="text-xs text-[#38383A] text-center">No constituye asesoramiento financiero.</p>
     </div>
   );
 }
@@ -897,13 +982,11 @@ function AssetDetailPanel({ asset, onClose }: { asset: MarketItem; onClose: () =
               style={{ background: activeTab === 'signals' ? '#2C2C2E' : 'transparent', color: activeTab === 'signals' ? '#FFFFFF' : '#636366' }}>
               <TrendingUp size={11} /> Señales
             </button>
-            {asset.isIndex && (
-              <button onClick={() => setActiveTab('ib')}
-                className="flex-1 py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1"
-                style={{ background: activeTab === 'ib' ? '#2C2C2E' : 'transparent', color: activeTab === 'ib' ? '#FFFFFF' : '#636366' }}>
-                <Zap size={11} /> Quant
-              </button>
-            )}
+            <button onClick={() => setActiveTab('ib')}
+              className="flex-1 py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1"
+              style={{ background: activeTab === 'ib' ? '#2C2C2E' : 'transparent', color: activeTab === 'ib' ? '#FFFFFF' : '#636366' }}>
+              <Zap size={11} /> Quant
+            </button>
             <button onClick={() => setActiveTab('sr')}
               className="flex-1 py-2 rounded-lg text-xs font-semibold transition-all"
               style={{ background: activeTab === 'sr' ? '#2C2C2E' : 'transparent', color: activeTab === 'sr' ? '#FFFFFF' : '#636366' }}>
