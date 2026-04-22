@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, X, TrendingUp, TrendingDown, RefreshCw, Clock, Zap, ChevronDown, ChevronUp, Target, Shield, Activity, BarChart2, Newspaper } from 'lucide-react';
-import { runQuantAnalysis, type QuantAnalysis, type LogAnomalySignal, runLogAnomalyModel, fetchQuantCandles } from '@/lib/quantModel';
+import { runQuantAnalysis, type QuantAnalysis, type LogAnomalySignal, type PrecisionEntry, runLogAnomalyModel, fetchQuantCandles } from '@/lib/quantModel';
 import axios from 'axios';
 import { analyzeAsset, type UniversalAnalysis, type TimeframeSignal, ASSET_CATALOG } from '@/lib/universalAnalysis';
 import { useStore } from '@/store/useStore';
@@ -752,6 +752,61 @@ function QuantSignalsPanel({ symbol, assetName }: { symbol: string; assetName: s
                 </div>
               );
             })}
+        </div>
+      )}
+
+      {/* ── ENTRADAS DE PRECISIÓN 5MIN ── */}
+      {qAnalysis.precisionEntries && qAnalysis.precisionEntries.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 px-1">
+            <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: '#FF9500' }} />
+            <span className="text-xs font-bold uppercase tracking-wider" style={{ color: '#FF9500' }}>
+              Entradas Precisión — 5 Min
+            </span>
+          </div>
+          {qAnalysis.precisionEntries.map((entry, i) => {
+            const color = entry.direction === 'LONG' ? '#34C759' : '#FF3B30';
+            const typeColor = entry.type === 'FVG' ? '#007AFF' : '#AF52DE';
+            return (
+              <div key={i} className="p-3 rounded-xl"
+                style={{ background: '#1C1C1E', border: `1px solid ${color}30` }}>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    {entry.direction === 'LONG' ? <TrendingUp size={13} color={color} /> : <TrendingDown size={13} color={color} />}
+                    <span className="text-sm font-bold" style={{ color }}>{entry.direction}</span>
+                    <span className="text-xs font-bold px-1.5 py-0.5 rounded-full"
+                      style={{ color: typeColor, background: typeColor + '20' }}>
+                      {entry.type}
+                    </span>
+                    <span className="text-xs" style={{ color: entry.strength === 'strong' ? '#34C759' : '#FF9500' }}>
+                      {entry.strength === 'strong' ? 'Fuerte' : 'Moderado'}
+                    </span>
+                  </div>
+                  <span className="text-xs font-bold" style={{ color: '#FF9500' }}>{entry.rr}</span>
+                </div>
+                <div className="text-xs mb-2" style={{ color: '#636366' }}>
+                  Zona: {entry.entryZone.low.toLocaleString()} — {entry.entryZone.high.toLocaleString()}
+                </div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  <div className="p-2 rounded-lg text-center" style={{ background: '#2C2C2E' }}>
+                    <div className="text-xs text-[#636366]">Entrada</div>
+                    <div className="text-xs font-bold text-white">{entry.entry.toLocaleString()}</div>
+                  </div>
+                  <div className="p-2 rounded-lg text-center" style={{ background: 'rgba(255,59,48,0.1)' }}>
+                    <div className="text-xs text-[#FF3B30]">Stop</div>
+                    <div className="text-xs font-bold text-[#FF3B30]">{entry.stopLoss.toLocaleString()}</div>
+                  </div>
+                  <div className="p-2 rounded-lg text-center" style={{ background: 'rgba(52,199,89,0.1)' }}>
+                    <div className="text-xs text-[#34C759]">Target</div>
+                    <div className="text-xs font-bold text-[#34C759]">{entry.takeProfit.toLocaleString()}</div>
+                  </div>
+                </div>
+                <p className="text-xs mt-2 leading-relaxed" style={{ color: '#636366' }}>
+                  {entry.description}
+                </p>
+              </div>
+            );
+          })}
         </div>
       )}
 
