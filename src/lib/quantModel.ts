@@ -92,6 +92,17 @@ export interface PrecisionEntry {
 
 // ─── Model config (optimal params from README) ────────────────────────────────
 
+// Decimales correctos por tipo de activo
+function getDecimals(price: number): number {
+  if (price < 10) return 5;      // Forex: EUR/USD, GBP/USD (1.13456)
+  if (price < 1000) return 3;    // USD/JPY, ETH/USD
+  return 2;                       // Oro, BTC, índices
+}
+
+function priceFix(price: number): number {
+  return parseFloat(price.toFixed(getDecimals(price)));
+}
+
 const MODEL_CONFIG = {
   window: 30,           // rolling window for mean/std
   thresholdSigma: 2.5,  // ±2.5 standard deviations
@@ -233,10 +244,10 @@ async function fetchYahooCandles(yahooSymbol: string, outputsize = 500): Promise
       const datetime = `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())} ${pad(dt.getHours())}:${pad(dt.getMinutes())}:00`;
       candles.push({
         datetime,
-        open: parseFloat((opens[i] || closes[i]).toFixed(2)),
-        high: parseFloat((highs[i] || closes[i]).toFixed(2)),
-        low: parseFloat((lows[i] || closes[i]).toFixed(2)),
-        close: parseFloat(closes[i].toFixed(2)),
+        open: parseFloat((opens[i] || closes[i]).toFixed(5)),
+        high: parseFloat((highs[i] || closes[i]).toFixed(5)),
+        low: parseFloat((lows[i] || closes[i]).toFixed(5)),
+        close: parseFloat(closes[i].toFixed(5)),
         volume: volumes[i] || 0,
       });
     }
@@ -464,9 +475,9 @@ export function runLogAnomalyModel(candles: QuantCandle[]): LogAnomalySignal[] {
       pValue: parseFloat(pValue.toFixed(6)),
       direction,
       signalStrength: parseFloat(signalStrength.toFixed(4)),
-      entryPrice: parseFloat(entryPrice.toFixed(2)),
-      stopLoss: parseFloat(stopLoss.toFixed(2)),
-      takeProfit: parseFloat(takeProfit.toFixed(2)),
+      entryPrice: priceFix(entryPrice),
+      stopLoss: priceFix(stopLoss),
+      takeProfit: priceFix(takeProfit),
       isSignificant: pValue < 0.05,
       isSignificant99: pValue < 0.01,
       rollingMean: parseFloat(mean.toFixed(6)),
@@ -632,13 +643,13 @@ function detectFVGs(candles: QuantCandle[], direction: 'LONG' | 'SHORT'): Precis
           type: 'FVG',
           direction: 'LONG',
           entryZone: { high: gapHigh, low: gapLow },
-          entry: parseFloat(mid.toFixed(2)),
-          stopLoss: parseFloat((gapLow - atr * 0.5).toFixed(2)),
-          takeProfit: parseFloat((mid + (mid - (gapLow - atr * 0.5)) * 2).toFixed(2)),
+          entry: priceFix(mid),
+          stopLoss: priceFix(gapLow - atr * 0.5),
+          takeProfit: priceFix(mid + (mid - (gapLow - atr * 0.5)) * 2),
           rr: '1:2',
           strength: (gapHigh - gapLow) > atr * 0.5 ? 'strong' : 'moderate',
           timestamp: c2.datetime,
-          description: `FVG alcista en zona ${gapLow.toFixed(2)}-${gapHigh.toFixed(2)}. Precio puede retroceder a llenar el gap antes de continuar al alza.`,
+          description: `FVG alcista en zona ${priceFix(gapLow)}-${priceFix(gapHigh)}. Precio puede retroceder a llenar el gap antes de continuar al alza.`,
         });
       }
     } else {
@@ -652,13 +663,13 @@ function detectFVGs(candles: QuantCandle[], direction: 'LONG' | 'SHORT'): Precis
           type: 'FVG',
           direction: 'SHORT',
           entryZone: { high: gapHigh, low: gapLow },
-          entry: parseFloat(mid.toFixed(2)),
-          stopLoss: parseFloat((gapHigh + atr * 0.5).toFixed(2)),
-          takeProfit: parseFloat((mid - (gapHigh + atr * 0.5 - mid) * 2).toFixed(2)),
+          entry: priceFix(mid),
+          stopLoss: priceFix(gapHigh + atr * 0.5),
+          takeProfit: priceFix(mid - (gapHigh + atr * 0.5 - mid) * 2),
           rr: '1:2',
           strength: (gapHigh - gapLow) > atr * 0.5 ? 'strong' : 'moderate',
           timestamp: c2.datetime,
-          description: `FVG bajista en zona ${gapLow.toFixed(2)}-${gapHigh.toFixed(2)}. Precio puede retroceder a llenar el gap antes de continuar a la baja.`,
+          description: `FVG bajista en zona ${priceFix(gapLow)}-${priceFix(gapHigh)}. Precio puede retroceder a llenar el gap antes de continuar a la baja.`,
         });
       }
     }
@@ -694,13 +705,13 @@ function detectOrderBlocks(candles: QuantCandle[], direction: 'LONG' | 'SHORT'):
           type: 'ORDER_BLOCK',
           direction: 'LONG',
           entryZone: { high: obHigh, low: obLow },
-          entry: parseFloat(mid.toFixed(2)),
-          stopLoss: parseFloat((obLow - atr * 0.3).toFixed(2)),
-          takeProfit: parseFloat((mid + (mid - (obLow - atr * 0.3)) * 2.5).toFixed(2)),
+          entry: priceFix(mid),
+          stopLoss: priceFix(obLow - atr * 0.3),
+          takeProfit: priceFix(mid + (mid - (obLow - atr * 0.3)) * 2.5),
           rr: '1:2.5',
           strength: nextSize > obSize * 2 ? 'strong' : 'moderate',
           timestamp: ob.datetime,
-          description: `Order Block alcista en ${obLow.toFixed(2)}-${obHigh.toFixed(2)}. Zona de demanda institucional. Esperar retroceso a esta zona para entrar LONG.`,
+          description: `Order Block alcista en ${priceFix(obLow)}-${priceFix(obHigh)}. Zona de demanda institucional. Esperar retroceso a esta zona para entrar LONG.`,
         });
       }
     } else {
@@ -715,13 +726,13 @@ function detectOrderBlocks(candles: QuantCandle[], direction: 'LONG' | 'SHORT'):
           type: 'ORDER_BLOCK',
           direction: 'SHORT',
           entryZone: { high: obHigh, low: obLow },
-          entry: parseFloat(mid.toFixed(2)),
-          stopLoss: parseFloat((obHigh + atr * 0.3).toFixed(2)),
-          takeProfit: parseFloat((mid - (obHigh + atr * 0.3 - mid) * 2.5).toFixed(2)),
+          entry: priceFix(mid),
+          stopLoss: priceFix(obHigh + atr * 0.3),
+          takeProfit: priceFix(mid - (obHigh + atr * 0.3 - mid) * 2.5),
           rr: '1:2.5',
           strength: nextSize > obSize * 2 ? 'strong' : 'moderate',
           timestamp: ob.datetime,
-          description: `Order Block bajista en ${obLow.toFixed(2)}-${obHigh.toFixed(2)}. Zona de oferta institucional. Esperar retroceso a esta zona para entrar SHORT.`,
+          description: `Order Block bajista en ${priceFix(obLow)}-${priceFix(obHigh)}. Zona de oferta institucional. Esperar retroceso a esta zona para entrar SHORT.`,
         });
       }
     }
