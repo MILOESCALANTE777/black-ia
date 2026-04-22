@@ -176,9 +176,60 @@ function getNextSignalWindow(): string {
   return `${String(hours).padStart(2, '0')}:${String(nextMin).padStart(2, '0')} NY`;
 }
 
-// ─── Fetch candles ────────────────────────────────────────────────────────────
+// ─── Yahoo Finance symbols map ────────────────────────────────────────────────
+
+const YAHOO_SYMBOLS: Record<string, string> = {
+  'SPX': '^GSPC',
+  'DJI': '^DJI',
+  'NDX': '^IXIC',
+};
+
+// ─── Fetch candles — Yahoo Finance for indices, Twelve Data for forex/crypto ──
+
+async function fetchYahooCandles(yahooSymbol: string, outputsize = 500): Promise<QuantCandle[]> {
+  try {
+    const res = await axios.get(`/api/yahoo/chart/${encodeURIComponent(yahooSymbol)}`, {
+      params: { interval: '15m', range: '10d' },
+      timeout: 15000,
+    });
+    const result = res.data?.chart?.result?.[0];
+    if (!result) throw new Error('no data');
+
+    const timestamps: number[] = result.timestamp || [];
+    const quote = result.indicators?.quote?.[0] || {};
+    const opens: number[] = quote.open || [];
+    const highs: number[] = quote.high || [];
+    const lows: number[] = quote.low || [];
+    const closes: number[] = quote.close || [];
+    const volumes: number[] = quote.volume || [];
+
+    const candles: QuantCandle[] = [];
+    for (let i = timestamps.length - 1; i >= 0; i--) {
+      if (!closes[i] || isNaN(closes[i])) continue;
+      const dt = new Date(timestamps[i] * 1000);
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const datetime = `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())} ${pad(dt.getHours())}:${pad(dt.getMinutes())}:00`;
+      candles.push({
+        datetime,
+        open: parseFloat((opens[i] || closes[i]).toFixed(2)),
+        high: parseFloat((highs[i] || closes[i]).toFixed(2)),
+        low: parseFloat((lows[i] || closes[i]).toFixed(2)),
+        close: parseFloat(closes[i].toFixed(2)),
+        volume: volumes[i] || 0,
+      });
+    }
+    return candles.slice(0, outputsize);
+  } catch {
+    return [];
+  }
+}
 
 export async function fetchQuantCandles(symbol: string, interval = '15min', outputsize = 500): Promise<QuantCandle[]> {
+  // Use Yahoo Finance for indices (free, no API key needed)
+  const yahooSym = YAHOO_SYMBOLS[symbol];
+  if (yahooSym) return fetchYahooCandles(yahooSym, outputsize);
+
+  // Use Twelve Data for forex/crypto
   try {
     const res = await axios.get('/api/twelve/time_series', {
       params: { symbol, interval, outputsize, apikey: TWELVE_KEY, format: 'JSON' },
@@ -258,6 +309,26 @@ export function clearSignalHistory(symbol?: string): void {
 }
 
 async function fetchCurrentPrice(symbol: string): Promise<{ price: number; change: number; pct: number }> {
+  // Yahoo Finance for indices
+  const yahooSym = YAHOO_SYMBOLS[symbol];
+  if (yahooSym) {
+    try {
+      const res = await axios.get(`/api/yahoo/chart/${encodeURIComponent(yahooSym)}`, {
+        params: { interval: '1d', range: '2d' },
+        timeout: 8000,
+      });
+      const meta = res.data?.chart?.result?.[0]?.meta;
+      if (meta?.regularMarketPrice) {
+        const price = meta.regularMarketPrice;
+        const prev = meta.chartPreviousClose || meta.previousClose || price;
+        const change = price - prev;
+        const pct = prev > 0 ? (change / prev) * 100 : 0;
+        return { price, change: parseFloat(change.toFixed(2)), pct: parseFloat(pct.toFixed(2)) };
+      }
+    } catch { /* fall through */ }
+  }
+
+  // Twelve Data for forex/crypto
   try {
     const [p, q] = await Promise.all([
       axios.get('/api/twelve/price', { params: { symbol, apikey: TWELVE_KEY }, timeout: 8000 }),
@@ -270,6 +341,7 @@ async function fetchCurrentPrice(symbol: string): Promise<{ price: number; chang
     throw new Error('invalid');
   } catch {
     const fallbacks: Record<string, number> = {
+      'SPX': 7064, 'DJI': 49149, 'NDX': 24259,
       'XAU/USD': 3320, 'BTC/USD': 94000, 'ETH/USD': 1800,
       'EUR/USD': 1.135, 'GBP/USD': 1.328, 'USD/JPY': 142.5,
       'XAG/USD': 32.5,
@@ -522,6 +594,7 @@ Responde en JSON:
 
 export async function runQuantAnalysis(symbol = 'SPX'): Promise<QuantAnalysis> {
   const assetNames: Record<string, string> = {
+    'SPX': 'S&P 500', 'DJI': 'Dow Jones', 'NDX': 'Nasdaq',
     'XAU/USD': 'Oro', 'BTC/USD': 'Bitcoin', 'ETH/USD': 'Ethereum',
     'EUR/USD': 'Euro / Dólar', 'GBP/USD': 'Libra / Dólar', 'USD/JPY': 'Dólar / Yen',
     'XAG/USD': 'Plata',
