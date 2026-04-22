@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { TrendingUp, TrendingDown, RefreshCw, ChevronDown, ChevronUp, Activity, BarChart2, Newspaper } from 'lucide-react';
-import { runQuantAnalysis, type QuantAnalysis, type LogAnomalySignal, type NewsImpact, loadSignalHistory, clearSignalHistory, type StoredSignal } from '@/lib/quantModel';
+import { runQuantAnalysis, type QuantAnalysis, type LogAnomalySignal, type NewsImpact } from '@/lib/quantModel';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -189,16 +189,11 @@ export default function QuantScreen() {
   const [symbol, setSymbol] = useState('SPX');
   const [showPicker, setShowPicker] = useState(false);
   const [activeTab, setActiveTab] = useState<'signals' | 'news'>('signals');
-  const [signalHistory, setSignalHistory] = useState<StoredSignal[]>([]);
   const [timeframe, setTimeframe] = useState<'15min' | '1h' | '4h'>('15min');
   const [signalExpiry, setSignalExpiry] = useState(0);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const expiryCountdown = useCountdown(signalExpiry);
-
-  const refreshHistory = useCallback((sym: string) => {
-    setSignalHistory(loadSignalHistory(sym));
-  }, []);
 
   const load = useCallback(async (sym: string, tf = timeframe) => {
     setLoading(true);
@@ -206,7 +201,6 @@ export default function QuantScreen() {
     try {
       const result = await runQuantAnalysis(sym);
       setAnalysis(result);
-      refreshHistory(sym);
       if (result.metrics.lastSignal?.direction !== 'NONE') {
         setSignalExpiry(8 * TF_MINUTES[tf] * 60);
       }
@@ -216,11 +210,10 @@ export default function QuantScreen() {
     } finally {
       setLoading(false);
     }
-  }, [refreshHistory, timeframe]);
+  }, [timeframe]);
 
   useEffect(() => {
     load(symbol);
-    refreshHistory(symbol);
     countdownRef.current = setInterval(() => load(symbol), 15 * 60 * 1000);
     return () => { if (countdownRef.current) clearInterval(countdownRef.current); };
   }, [symbol]);
@@ -420,7 +413,7 @@ export default function QuantScreen() {
             {/* ── SEÑALES ── */}
             {activeTab === 'signals' && (
               <div className="space-y-2">
-                {analysis.signals.length === 0 && signalHistory.length === 0 && (
+                {analysis.signals.length === 0 && (
                   <div className="text-center py-8 rounded-2xl" style={{ background: '#1C1C1E', border: '1px solid #2C2C2E' }}>
                     <Activity size={24} color="#38383A" className="mx-auto mb-2" />
                     <p className="text-sm text-[#636366]">Sin anomalías detectadas</p>
@@ -428,7 +421,6 @@ export default function QuantScreen() {
                   </div>
                 )}
 
-                {/* Señales actuales */}
                 {analysis.signals.length > 0 && (
                   <>
                     <p className="text-xs font-bold text-[#34C759] uppercase tracking-wider px-1">
@@ -441,22 +433,6 @@ export default function QuantScreen() {
                         <SignalCard key={sig.timestamp + i} sig={sig} currentPrice={analysis.currentPrice} isLatest={i === 0} />
                       ))}
                   </>
-                )}
-
-                {/* Historial */}
-                {signalHistory.length > 0 && (
-                  <div className="mt-2">
-                    <div className="flex items-center justify-between px-1 mb-2">
-                      <p className="text-xs text-[#636366]">Historial ({signalHistory.length})</p>
-                      <button onClick={() => { clearSignalHistory(symbol); setSignalHistory([]); }}
-                        className="text-xs text-[#FF3B30]">Limpiar</button>
-                    </div>
-                    {signalHistory.slice(0, 20).map((sig, i) => (
-                      <div key={sig.timestamp + i} className="mb-2">
-                        <SignalCard sig={sig} currentPrice={analysis.currentPrice} />
-                      </div>
-                    ))}
-                  </div>
                 )}
               </div>
             )}
