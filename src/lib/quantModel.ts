@@ -157,19 +157,23 @@ function getNYTime(): { hours: number; minutes: number; timeStr: string; isMarke
   const now = new Date();
   const nyStr = now.toLocaleString('en-US', { timeZone: 'America/New_York' });
   const nyDate = new Date(nyStr);
-  const hours = nyDate.getHours();
+  const hours   = nyDate.getHours();
   const minutes = nyDate.getMinutes();
+  const day     = nyDate.getDay(); // 0=domingo, 6=sábado
   const timeStr = nyDate.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' });
-  const isMarketOpen = (hours > 9 || (hours === 9 && minutes >= 30)) && hours < 16;
+
+  const isWeekday    = day >= 1 && day <= 5;
+  const isInSession  = (hours > 9 || (hours === 9 && minutes >= 30)) && hours < 16;
+  const isMarketOpen = isWeekday && isInSession;
+
   return { hours, minutes, timeStr, isMarketOpen };
 }
 
 function getNextSignalWindow(): string {
   const { hours, minutes, isMarketOpen } = getNYTime();
   if (!isMarketOpen) {
-    return 'Mercado cerrado. Proxima apertura: 9:30 AM NY';
+    return 'Mercado cerrado. Próxima apertura: 9:30 AM NY (Lun-Vie)';
   }
-  // Next 15-min bar
   const nextMin = Math.ceil(minutes / 15) * 15;
   if (nextMin >= 60) {
     return `${String(hours + 1).padStart(2, '0')}:00 NY`;
