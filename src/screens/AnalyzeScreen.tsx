@@ -2,9 +2,7 @@ import { useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ImageIcon, Zap, Upload, TrendingUp, TrendingDown, Minus, Target, Shield, ChevronDown, ChevronUp, RefreshCw, Brain } from 'lucide-react';
 import { useStore } from '@/store/useStore';
-import axios from 'axios';
-
-const OPENAI_KEY = import.meta.env.VITE_OPENAI_API_KEY;
+import { openaiPost } from '@/lib/openai';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -41,126 +39,45 @@ interface VisionAnalysis {
 // ─── GPT-4o Vision call ───────────────────────────────────────────────────────
 
 async function analyzeChartImage(
-  base64Image: string, 
+  base64Image: string,
   symbol: string,
   userProfile?: any
 ): Promise<VisionAnalysis> {
-  // Verificar que la API key esté configurada
-  if (!OPENAI_KEY || OPENAI_KEY === 'undefined') {
-    throw new Error('API key de OpenAI no configurada. Verifica tu archivo .env');
-  }
 
-  // Construir contexto del usuario si está disponible
+  // Contexto del perfil del usuario
   let userContext = '';
   if (userProfile) {
-    const experienceLabels = {
-      beginner: 'Principiante',
-      intermediate: 'Intermedio',
-      advanced: 'Avanzado',
-      expert: 'Experto'
-    };
-    
-    const styleLabels = {
-      scalper: 'Scalper (operaciones de segundos/minutos)',
-      day_trader: 'Day Trader (operaciones intradía)',
-      swing_trader: 'Swing Trader (operaciones de días/semanas)',
-      position_trader: 'Position Trader (operaciones de largo plazo)'
-    };
-    
-    const riskLabels = {
-      conservative: 'Conservador (1-2% por trade)',
-      moderate: 'Moderado (2-3% por trade)',
-      aggressive: 'Agresivo (3-5% por trade)'
-    };
-
-    userContext = `
-
-PERFIL DEL TRADER:
-- Nivel de experiencia: ${experienceLabels[userProfile.experience_level as keyof typeof experienceLabels] || userProfile.experience_level}
-- Estilo de trading: ${styleLabels[userProfile.trading_style as keyof typeof styleLabels] || userProfile.trading_style}
-- Mercados preferidos: ${userProfile.preferred_markets?.join(', ') || 'Todos'}
-- Tolerancia al riesgo: ${riskLabels[userProfile.risk_tolerance as keyof typeof riskLabels] || userProfile.risk_tolerance}
-- Timeframes preferidos: ${userProfile.preferred_timeframes?.join(', ') || '1h, 4h'}
-- Riesgo máximo por trade: ${userProfile.max_risk_per_trade || 2}%
-- Ratio R:R preferido: 1:${userProfile.preferred_rr_ratio || 2}
-
-IMPORTANTE: Adapta tu análisis y estrategias específicamente para este perfil de trader. 
-- Si es principiante: usa lenguaje simple, explica conceptos, estrategias conservadoras
-- Si es avanzado/experto: usa terminología técnica avanzada, estrategias complejas
-- Respeta su estilo de trading y timeframes preferidos
-- Ajusta los stops y targets según su tolerancia al riesgo
-- Asegúrate que el R:R sea al menos el que prefiere`;
+    const expMap: Record<string, string> = { beginner: 'Principiante', intermediate: 'Intermedio', advanced: 'Avanzado', expert: 'Experto' };
+    const styleMap: Record<string, string> = { scalper: 'Scalper', day_trader: 'Day Trader', swing_trader: 'Swing Trader', position_trader: 'Position Trader' };
+    const riskMap: Record<string, string> = { conservative: 'Conservador (1-2%)', moderate: 'Moderado (2-3%)', aggressive: 'Agresivo (3-5%)' };
+    userContext = `\n\nPERFIL DEL TRADER:\n- Experiencia: ${expMap[userProfile.experience_level] || userProfile.experience_level}\n- Estilo: ${styleMap[userProfile.trading_style] || userProfile.trading_style}\n- Mercados: ${userProfile.preferred_markets?.join(', ') || 'Todos'}\n- Riesgo: ${riskMap[userProfile.risk_tolerance] || userProfile.risk_tolerance}\n- Timeframes: ${userProfile.preferred_timeframes?.join(', ') || '1h, 4h'}\n- Max riesgo/trade: ${userProfile.max_risk_per_trade || 2}%\n- R:R preferido: 1:${userProfile.preferred_rr_ratio || 2}\n\nAdapta el análisis, lenguaje y estrategias a este perfil.`;
   }
 
-  const prompt = `Eres un analista técnico experto de nivel institucional. Analiza esta imagen de gráfico de trading con MÁXIMO detalle.
+  const prompt = `Eres un analista técnico experto de nivel institucional. Analiza esta imagen de gráfico de trading.
 
 ACTIVO: ${symbol || 'Desconocido'}${userContext}
 
-Analiza TODOS estos elementos que puedas ver en el gráfico:
+Analiza: estructura de mercado (HH/HL o LH/LL), order blocks, soportes/resistencias, EMAs, RSI, MACD, patrones de velas, Fibonacci, volumen y temporalidad.
 
-1. ESTRUCTURA DE MERCADO: ¿HH/HL (alcista) o LH/LL (bajista)? ¿Rango o tendencia?
-2. ORDER BLOCKS: Identifica patrones verde→ROJA→verde (OB alcista) y roja→VERDE→roja (OB bajista). La vela del medio ES el order block.
-3. SOPORTES Y RESISTENCIAS: Niveles horizontales clave, zonas de precio importantes.
-4. EMAs: Si son visibles, ¿están alineadas? ¿Precio sobre o bajo EMAs?
-5. RSI: Si visible, ¿sobreventa (<30), sobrecompra (>70), divergencia?
-6. MACD: Si visible, ¿cruce alcista o bajista? ¿Histograma positivo o negativo?
-7. VELAS: Patrones de reversión (pin bar, engulfing, doji, hammer, shooting star).
-8. FIBONACCI: Si hay retrocesos visibles, ¿en qué nivel está el precio?
-9. VOLUMEN: ¿Confirma el movimiento? ¿Divergencia de volumen?
-10. TEMPORALIDAD: ¿Qué timeframe parece ser?
-
-Basado en TODO lo anterior, genera estrategias de trading CONCRETAS y ACCIONABLES.
-
-Responde ÚNICAMENTE en este JSON exacto (sin texto adicional):
+Responde ÚNICAMENTE en este JSON (sin texto adicional):
 {
-  "symbol": "símbolo del activo si es visible, sino 'Desconocido'",
+  "symbol": "símbolo visible o Desconocido",
   "timeframe": "temporalidad estimada",
-  "bias": "bullish" | "bearish" | "neutral",
-  "biasStrength": número 0-100,
-  "currentPrice": precio actual visible o 0,
-  "reasoning": "Análisis técnico completo en 4-5 oraciones: estructura, niveles clave, indicadores y confluencias",
-  "marketStructure": "Descripción de la estructura: tendencia, rango, puntos de inflexión",
-  "strategies": [
-    {
-      "name": "nombre de la estrategia",
-      "bias": "bullish" | "bearish" | "neutral",
-      "confidence": número 0-100,
-      "entry": precio de entrada numérico,
-      "sl": stop loss numérico,
-      "tp1": take profit 1 numérico,
-      "tp2": take profit 2 numérico,
-      "tp3": take profit 3 numérico,
-      "rr": "1:X",
-      "description": "descripción de la estrategia",
-      "conditions": ["condición 1", "condición 2", "condición 3"]
-    }
-  ],
-  "orderBlocks": [
-    { "type": "bullish" | "bearish", "zone": "precio_bajo-precio_alto", "strength": "strong" | "moderate" | "weak" }
-  ],
-  "keyLevels": {
-    "supports": ["nivel1", "nivel2", "nivel3"],
-    "resistances": ["nivel1", "nivel2", "nivel3"]
-  },
-  "indicators": {
-    "ema": "descripción del estado de las EMAs",
-    "rsi": "valor y estado del RSI",
-    "macd": "estado del MACD",
-    "volume": "análisis del volumen"
-  },
-  "probability": {
-    "bullish": número 0-100,
-    "bearish": número 0-100
-  },
-  "recommendation": "Recomendación concreta: qué hacer AHORA, con qué estrategia y por qué"
+  "bias": "bullish|bearish|neutral",
+  "biasStrength": 0,
+  "currentPrice": 0,
+  "reasoning": "análisis completo en 4-5 oraciones",
+  "marketStructure": "descripción de la estructura",
+  "strategies": [{"name":"","bias":"bullish","confidence":0,"entry":0,"sl":0,"tp1":0,"tp2":0,"tp3":0,"rr":"1:2","description":"","conditions":[]}],
+  "orderBlocks": [{"type":"bullish","zone":"bajo-alto","strength":"strong"}],
+  "keyLevels": {"supports":[],"resistances":[]},
+  "indicators": {"ema":"","rsi":"","macd":"","volume":""},
+  "probability": {"bullish":50,"bearish":50},
+  "recommendation": "qué hacer AHORA y por qué"
 }`;
 
   try {
-    console.log('🔍 Iniciando análisis de imagen...');
-    console.log('📊 Activo:', symbol || 'Desconocido');
-    console.log('🔑 API Key configurada:', OPENAI_KEY ? 'Sí' : 'No');
-
-    const body = {
+    const data = await openaiPost({
       model: 'gpt-4o',
       messages: [{
         role: 'user',
@@ -172,69 +89,18 @@ Responde ÚNICAMENTE en este JSON exacto (sin texto adicional):
       temperature: 0.2,
       max_tokens: 2000,
       response_format: { type: 'json_object' },
-    };
+    }, 60000);
 
-    const headers = {
-      'Authorization': `Bearer ${OPENAI_KEY}`,
-      'Content-Type': 'application/json',
-    };
+    if (!data?.choices?.[0]?.message?.content) throw new Error('Respuesta inválida de OpenAI');
+    return JSON.parse(data.choices[0].message.content);
 
-    let res;
-    try {
-      // Intentar primero con proxy (producción)
-      res = await axios.post('/api/openai/v1/chat/completions', body, { headers, timeout: 60000 });
-    } catch (proxyErr: any) {
-      // Si proxy falla, llamar directo (desarrollo)
-      if (proxyErr.response?.status === 404 || proxyErr.code === 'ERR_NETWORK' || proxyErr.message?.includes('404')) {
-        res = await axios.post('https://api.openai.com/v1/chat/completions', body, { headers, timeout: 60000 });
-      } else {
-        throw proxyErr;
-      }
-    }
-
-    console.log('✅ Respuesta recibida de OpenAI');
-    
-    if (!res.data?.choices?.[0]?.message?.content) {
-      throw new Error('Respuesta inválida de OpenAI');
-    }
-
-    const parsed = JSON.parse(res.data.choices[0].message.content);
-    console.log('✅ Análisis completado exitosamente');
-    
-    return parsed;
   } catch (error: any) {
-    console.error('❌ Error en análisis de imagen:', error);
-    
-    // Mensajes de error más específicos
-    if (error.code === 'ECONNABORTED') {
-      throw new Error('Timeout: La imagen es muy grande o la conexión es lenta. Intenta con una imagen más pequeña.');
-    }
-    
-    if (error.response) {
-      const status = error.response.status;
-      const data = error.response.data;
-      
-      console.error('📛 Status:', status);
-      console.error('📛 Data:', data);
-      
-      if (status === 401) {
-        throw new Error('API key inválida. Verifica tu configuración en el archivo .env');
-      } else if (status === 429) {
-        throw new Error('Límite de rate excedido. Espera unos minutos e intenta de nuevo.');
-      } else if (status === 400) {
-        throw new Error('Imagen inválida o muy grande. Intenta con otra imagen (máx 20MB).');
-      } else if (status === 500 || status === 502 || status === 503) {
-        throw new Error('Error del servidor de OpenAI. Intenta de nuevo en unos momentos.');
-      }
-      
-      throw new Error(`Error ${status}: ${data?.error?.message || 'Error desconocido'}`);
-    }
-    
-    if (error.request) {
-      throw new Error('No se pudo conectar con OpenAI. Verifica tu conexión a internet.');
-    }
-    
-    throw new Error(error.message || 'Error desconocido al analizar la imagen');
+    if (error.code === 'ECONNABORTED') throw new Error('Timeout: imagen muy grande o conexión lenta. Intenta con una imagen más pequeña.');
+    if (error.response?.status === 401) throw new Error('API key inválida. Verifica tu configuración.');
+    if (error.response?.status === 429) throw new Error('Límite de rate excedido. Espera unos minutos.');
+    if (error.response?.status === 400) throw new Error('Imagen inválida o muy grande (máx 20MB).');
+    if (error.response?.status >= 500) throw new Error('Error del servidor de OpenAI. Intenta de nuevo.');
+    throw new Error(error.message || 'Error al analizar la imagen.');
   }
 }
 
