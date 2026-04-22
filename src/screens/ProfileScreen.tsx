@@ -279,6 +279,7 @@ export default function ProfileScreen() {
                           : item.analysis_type === 'image' ? 'Imagen' : 'Noticias';
                         const typeColor = item.analysis_type === 'quant' ? '#AF52DE'
                           : item.analysis_type === 'image' ? '#007AFF' : '#FF9500';
+                        const hasPrices = item.entry_price && item.stop_loss && item.take_profit;
 
                         return (
                           <div key={item.id} className="p-3 rounded-xl"
@@ -307,8 +308,8 @@ export default function ProfileScreen() {
                               </button>
                             </div>
 
-                            {/* Fila 2: datos según tipo */}
-                            {item.analysis_type === 'quant' && item.entry_price ? (
+                            {/* Fila 2: precios si existen, sino bias */}
+                            {hasPrices ? (
                               <div className="grid grid-cols-3 gap-1.5 mb-2">
                                 <div className="p-1.5 rounded-lg text-center" style={{ background: isLight ? '#F0F0F5' : '#2C2C2E' }}>
                                   <div className="text-xs" style={{ color: textSecondary }}>Entrada</div>

@@ -341,6 +341,8 @@ export default function AnalyzeScreen() {
       if (user) {
         try {
           const { saveAnalysis } = await import('@/lib/supabase');
+          // Tomar la primera estrategia para entrada, stop y target
+          const firstStrategy = result.strategies?.[0];
           await saveAnalysis(user.id, {
             asset: result.symbol || symbol || 'Desconocido',
             timeframe: result.timeframe || '1h',
@@ -348,11 +350,12 @@ export default function AnalyzeScreen() {
             confidence: result.biasStrength,
             strategies: result.strategies,
             analysis_type: 'image',
+            entry_price: firstStrategy?.entry || result.currentPrice || undefined,
+            stop_loss: firstStrategy?.sl || undefined,
+            take_profit: firstStrategy?.tp1 || undefined,
           });
-          console.log('✅ Análisis guardado en historial');
         } catch (historyError) {
           console.error('⚠️ Error guardando en historial:', historyError);
-          // No mostrar error al usuario, el análisis ya se completó
         }
       }
     } catch (err: any) {
