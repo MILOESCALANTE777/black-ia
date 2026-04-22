@@ -251,11 +251,17 @@ export default function QuantScreen() {
   const [activeTab, setActiveTab] = useState<'signals' | 'news' | 'metrics'>('signals');
   const [signalHistory, setSignalHistory] = useState<StoredSignal[]>([]);
   const [showHistory, setShowHistory] = useState(true);
-  const [nextRefreshIn, setNextRefreshIn] = useState(900); // 15 min = 900 sec
-  const schedulerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [nextRefreshIn, setNextRefreshIn] = useState(900);
+  const [timeframe, setTimeframe] = useState<'15min' | '1h' | '4h'>('15min');
+  // Cronómetro de vigencia de señal activa (8 barras = 8 * tf en minutos)
+  const [signalExpiry, setSignalExpiry] = useState<number>(0);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const expiryRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const countdown = useCountdown(nextRefreshIn);
+  const expiryCountdown = useCountdown(signalExpiry);
+
+  const tfMinutes: Record<string, number> = { '15min': 15, '1h': 60, '4h': 240 };
 
   const refreshHistory = useCallback((sym: string) => {
     setSignalHistory(loadSignalHistory(sym));
@@ -268,34 +274,31 @@ export default function QuantScreen() {
       const result = await runQuantAnalysis(sym);
       setAnalysis(result);
       refreshHistory(sym);
-      setNextRefreshIn(900); // reset countdown
+      setNextRefreshIn(900);
+      // Calcular vigencia de la señal activa: 8 barras del timeframe seleccionado
+      if (result.metrics.lastSignal && result.metrics.lastSignal.direction !== 'NONE') {
+        const tf = timeframe;
+        const barsLeft = 8; // max holding bars
+        setSignalExpiry(barsLeft * tfMinutes[tf] * 60); // en segundos
+      }
     } catch (e) {
       setError('Error al ejecutar el modelo. Verifica tu conexion.');
       console.error(e);
     } finally {
       setLoading(false);
     }
-  }, [refreshHistory]);
+  }, [refreshHistory, timeframe]);
 
-  // Auto-refresh every 15 minutes
   useEffect(() => {
     load(symbol);
     refreshHistory(symbol);
-
-    // Countdown timer
     countdownRef.current = setInterval(() => {
       setNextRefreshIn(prev => {
-        if (prev <= 1) {
-          load(symbol);
-          return 900;
-        }
+        if (prev <= 1) { load(symbol); return 900; }
         return prev - 1;
       });
     }, 1000);
-
-    return () => {
-      if (countdownRef.current) clearInterval(countdownRef.current);
-    };
+    return () => { if (countdownRef.current) clearInterval(countdownRef.current); };
   }, [symbol, load, refreshHistory]);
 
   const handleSymbolChange = (sym: string) => {
@@ -328,10 +331,11 @@ export default function QuantScreen() {
 
   const lastSig = analysis?.metrics.lastSignal;
   const lastSigColor = lastSig?.direction === 'LONG' ? '#34C759' : lastSig?.direction === 'SHORT' ? '#FF3B30' : '#636366';
+  const hasActiveSignal = lastSig && lastSig.direction !== 'NONE' && signalExpiry > 0;
 
   return (
     <div className="flex-1 flex flex-col bg-black overflow-hidden">
-      {/* Header */}
+      {/* Header — UN SOLO BOTÓN */}
       <div className="shrink-0 px-5 md:px-8 py-4"
         style={{ background: 'rgba(0,0,0,0.95)', backdropFilter: 'blur(20px)', borderBottom: '1px solid #1C1C1E' }}>
         <div className="flex items-center justify-between">
@@ -356,20 +360,16 @@ export default function QuantScreen() {
             {analysis && (
               <div className="flex items-center gap-1 text-xs" style={{ color: analysis.isMarketOpen ? '#34C759' : '#636366' }}>
                 <div className="w-1.5 h-1.5 rounded-full" style={{ background: analysis.isMarketOpen ? '#34C759' : '#636366' }} />
-                <span>{analysis.isMarketOpen ? 'Abierto' : 'Cerrado'}</span>
-                <span className="text-[#38383A] ml-1">{analysis.nyTime} NY</span>
+                <span className="hidden md:inline">{analysis.isMarketOpen ? 'Abierto' : 'Cerrado'}</span>
+                <span className="text-[#38383A] ml-1 hidden md:inline">{analysis.nyTime} NY</span>
               </div>
             )}
-            {/* Auto-refresh countdown */}
-            <div className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-mono" style={{ background: '#1C1C1E', border: '1px solid #38383A' }}>
-              <Timer size={11} color="#FF9500" />
-              <span className="text-[#FF9500] font-bold">{countdown}</span>
-            </div>
+            {/* UN SOLO BOTÓN */}
             <button onClick={handleManualRefresh} disabled={loading}
-              className="px-4 py-2 rounded-full flex items-center gap-2 font-semibold text-sm transition-all active:scale-95 disabled:opacity-50"
+              className="px-4 py-2 rounded-full flex items-center gap-2 font-bold text-sm transition-all active:scale-95 disabled:opacity-50"
               style={{ background: loading ? '#1C1C1E' : 'linear-gradient(135deg, #AF52DE, #007AFF)', color: '#FFFFFF', border: loading ? '1px solid #38383A' : 'none' }}>
               <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-              <span className="hidden md:inline">{loading ? 'Analizando...' : 'Analizar Ahora'}</span>
+              {loading ? 'Analizando...' : 'Analizar Ahora'}
             </button>
           </div>
         </div>
@@ -427,13 +427,71 @@ export default function QuantScreen() {
         <div className="flex-1 overflow-y-auto no-scrollbar">
           <div className="px-5 md:px-8 pb-8">
 
+            {/* ── CRONÓMETRO DE VIGENCIA DE SEÑAL ── */}
+            {hasActiveSignal && (
+              <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+                className="mt-4 p-4 rounded-2xl flex items-center justify-between"
+                style={{ background: lastSigColor + '12', border: `1px solid ${lastSigColor}40` }}>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center"
+                    style={{ background: lastSigColor + '20' }}>
+                    {lastSig!.direction === 'LONG'
+                      ? <TrendingUp size={20} color={lastSigColor} />
+                      : <TrendingDown size={20} color={lastSigColor} />}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-black" style={{ color: lastSigColor }}>
+                        SEÑAL {lastSig!.direction} ACTIVA
+                      </span>
+                      <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: lastSigColor }} />
+                    </div>
+                    <span className="text-xs text-[#8E8E93]">
+                      Entrada: {lastSig!.entryPrice.toLocaleString()} · Fuerza: {Math.round(lastSig!.signalStrength * 100)}%
+                    </span>
+                  </div>
+                </div>
+                {/* Cronómetro */}
+                <div className="text-right">
+                  <div className="text-xs text-[#636366] mb-0.5">Vigencia</div>
+                  <div className="font-mono font-black text-xl" style={{ color: signalExpiry < 300 ? '#FF3B30' : signalExpiry < 900 ? '#FF9500' : lastSigColor }}>
+                    {expiryCountdown}
+                  </div>
+                  <div className="text-xs text-[#636366]">restante</div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* ── SELECTOR DE TEMPORALIDADES ── */}
+            <div className="mt-4 flex items-center gap-2">
+              <span className="text-xs text-[#636366] shrink-0">Temporalidad:</span>
+              <div className="flex rounded-xl overflow-hidden" style={{ border: '1px solid #38383A' }}>
+                {(['15min', '1h', '4h'] as const).map((tf) => (
+                  <button key={tf} onClick={() => { setTimeframe(tf); handleManualRefresh(); }}
+                    className="px-3 py-1.5 text-xs font-bold transition-all"
+                    style={{
+                      background: timeframe === tf ? asset.color : 'transparent',
+                      color: timeframe === tf ? '#000' : '#8E8E93',
+                    }}>
+                    {tf}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-1 ml-auto text-xs font-mono" style={{ color: '#FF9500' }}>
+                <Timer size={11} color="#FF9500" />
+                <span className="font-bold">{countdown}</span>
+              </div>
+            </div>
+
             {/* AI Summary + regime */}
             <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
-              className="mt-4 p-4 rounded-2xl" style={{ background: '#1C1C1E', border: `1px solid ${asset.color}25` }}>
+              className="mt-3 p-4 rounded-2xl" style={{ background: '#1C1C1E', border: `1px solid ${asset.color}25` }}>
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                   <Zap size={14} color={asset.color} />
-                  <span className="text-xs font-bold uppercase tracking-wider" style={{ color: asset.color }}>Modelo Cuant — Log Anomaly</span>
+                  <span className="text-xs font-bold uppercase tracking-wider" style={{ color: asset.color }}>
+                    Modelo Cuant — {timeframe}
+                  </span>
                 </div>
                 <span className="text-xs font-bold px-2 py-0.5 rounded-full"
                   style={{ color: regimeColor[analysis.marketRegime] || '#FF9500', background: (regimeColor[analysis.marketRegime] || '#FF9500') + '20' }}>
@@ -441,21 +499,9 @@ export default function QuantScreen() {
                 </span>
               </div>
               <p className="text-sm text-[#8E8E93] leading-relaxed">{analysis.aiSummary}</p>
-              <div className="flex items-center justify-between mt-3">
-                <div className="flex items-center gap-2 text-xs text-[#636366]">
-                  <Clock size={10} />
-                  <span>Proxima señal: {analysis.nextSignalWindow}</span>
-                </div>
-                {/* Botón Analizar Ahora */}
-                <button
-                  onClick={handleManualRefresh}
-                  disabled={loading}
-                  className="flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold transition-all active:scale-95 disabled:opacity-50"
-                  style={{ background: loading ? '#2C2C2E' : 'linear-gradient(135deg, #AF52DE, #007AFF)', color: '#FFFFFF' }}
-                >
-                  <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
-                  {loading ? 'Analizando...' : 'Analizar Ahora'}
-                </button>
+              <div className="flex items-center gap-2 mt-2 text-xs text-[#636366]">
+                <Clock size={10} />
+                <span>Proxima señal: {analysis.nextSignalWindow}</span>
               </div>
             </motion.div>
 
@@ -508,7 +554,6 @@ export default function QuantScreen() {
             {/* Signals tab */}
             {activeTab === 'signals' && (
               <div className="space-y-2">
-                {/* Current session signals */}
                 {analysis.signals.length > 0 && (
                   <>
                     <div className="flex items-center gap-2 mb-2">
@@ -522,7 +567,6 @@ export default function QuantScreen() {
                     ))}
                   </>
                 )}
-
                 {analysis.signals.length === 0 && (
                   <div className="text-center py-6 rounded-2xl" style={{ background: '#1C1C1E', border: '1px solid #38383A' }}>
                     <Activity size={28} color="#38383A" className="mx-auto mb-3" />
@@ -530,59 +574,36 @@ export default function QuantScreen() {
                     <p className="text-xs text-[#38383A] mt-1">El modelo requiere |Z-Score| {'>='} 2.5σ</p>
                   </div>
                 )}
-
-                {/* Historical signals */}
                 {signalHistory.length > 0 && (
                   <div className="mt-4">
-                    <button
-                      onClick={() => setShowHistory(!showHistory)}
+                    <button onClick={() => setShowHistory(!showHistory)}
                       className="w-full flex items-center justify-between px-4 py-3 rounded-2xl mb-2"
-                      style={{ background: '#1C1C1E', border: '1px solid #38383A' }}
-                    >
+                      style={{ background: '#1C1C1E', border: '1px solid #38383A' }}>
                       <div className="flex items-center gap-2">
                         <History size={14} color="#636366" />
                         <span className="text-xs font-bold text-[#8E8E93] uppercase tracking-wider">
-                          Historial — {signalHistory.length} señales guardadas
+                          Historial — {signalHistory.length} señales
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleClearHistory(); }}
-                          className="p-1 rounded-lg"
-                          style={{ background: 'rgba(255,59,48,0.1)' }}
-                        >
+                        <button onClick={(e) => { e.stopPropagation(); handleClearHistory(); }}
+                          className="p-1 rounded-lg" style={{ background: 'rgba(255,59,48,0.1)' }}>
                           <Trash2 size={12} color="#FF3B30" />
                         </button>
                         {showHistory ? <ChevronUp size={14} color="#636366" /> : <ChevronDown size={14} color="#636366" />}
                       </div>
                     </button>
-
                     <AnimatePresence>
                       {showHistory && (
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: 'auto' }}
-                          exit={{ opacity: 0, height: 0 }}
-                          className="space-y-2"
-                        >
+                        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }} className="space-y-2">
                           {signalHistory.slice(0, 50).map((sig, i) => (
                             <SignalRow key={sig.timestamp + sig.symbol + i} sig={sig} isLatest={false} isHistorical currentPrice={analysis.currentPrice} />
                           ))}
-                          {signalHistory.length > 50 && (
-                            <p className="text-xs text-[#38383A] text-center py-2">
-                              Mostrando 50 de {signalHistory.length} señales históricas
-                            </p>
-                          )}
                         </motion.div>
                       )}
                     </AnimatePresence>
                   </div>
-                )}
-
-                {analysis.signals.length === 0 && signalHistory.length === 0 && (
-                  <p className="text-xs text-[#38383A] text-center mt-2">
-                    El historial se acumula con cada análisis. Vuelve durante el horario de mercado (9:30–16:00 NY).
-                  </p>
                 )}
               </div>
             )}
@@ -626,8 +647,9 @@ export default function QuantScreen() {
                   {[
                     ['Ventana (Media Movil)', '30 barras'],
                     ['Umbral (σ)', '±2.5 desv. estandar'],
-                    ['Max Hold', '8 barras (2h en 15m)'],
-                    ['Intervalo', '15 minutos'],
+                    ['Max Hold', '8 barras'],
+                    ['Temporalidad activa', timeframe],
+                    ['Vigencia señal', `${8 * tfMinutes[timeframe]} min`],
                     ['Confianza', '95% (p < 0.05)'],
                     ['Estrategia', 'Mean Reversion'],
                     ['Z-Score Max', analysis.metrics.zScoreMax.toFixed(4)],
@@ -639,9 +661,6 @@ export default function QuantScreen() {
                     </div>
                   ))}
                 </div>
-                <p className="text-xs text-[#38383A] text-center leading-relaxed">
-                  Modelo Log-Anomaly: detecta anomalias estadisticas en rendimientos logaritmicos. Señales se generan a las 9:30 AM NY y cada 15 min durante RTH.
-                </p>
               </div>
             )}
           </div>
@@ -650,3 +669,4 @@ export default function QuantScreen() {
     </div>
   );
 }
+
