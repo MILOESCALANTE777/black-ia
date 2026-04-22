@@ -366,9 +366,10 @@ export default function QuantScreen() {
               <span className="text-[#FF9500] font-bold">{countdown}</span>
             </div>
             <button onClick={handleManualRefresh} disabled={loading}
-              className="w-9 h-9 rounded-full flex items-center justify-center"
-              style={{ background: '#1C1C1E', border: '1px solid #38383A' }}>
-              <RefreshCw size={15} color="#8E8E93" className={loading ? 'animate-spin' : ''} />
+              className="px-4 py-2 rounded-full flex items-center gap-2 font-semibold text-sm transition-all active:scale-95 disabled:opacity-50"
+              style={{ background: loading ? '#1C1C1E' : 'linear-gradient(135deg, #AF52DE, #007AFF)', color: '#FFFFFF', border: loading ? '1px solid #38383A' : 'none' }}>
+              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+              <span className="hidden md:inline">{loading ? 'Analizando...' : 'Analizar Ahora'}</span>
             </button>
           </div>
         </div>
@@ -440,9 +441,21 @@ export default function QuantScreen() {
                 </span>
               </div>
               <p className="text-sm text-[#8E8E93] leading-relaxed">{analysis.aiSummary}</p>
-              <div className="flex items-center gap-2 mt-2 text-xs text-[#636366]">
-                <Clock size={10} />
-                <span>Proxima señal: {analysis.nextSignalWindow}</span>
+              <div className="flex items-center justify-between mt-3">
+                <div className="flex items-center gap-2 text-xs text-[#636366]">
+                  <Clock size={10} />
+                  <span>Proxima señal: {analysis.nextSignalWindow}</span>
+                </div>
+                {/* Botón Analizar Ahora */}
+                <button
+                  onClick={handleManualRefresh}
+                  disabled={loading}
+                  className="flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold transition-all active:scale-95 disabled:opacity-50"
+                  style={{ background: loading ? '#2C2C2E' : 'linear-gradient(135deg, #AF52DE, #007AFF)', color: '#FFFFFF' }}
+                >
+                  <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
+                  {loading ? 'Analizando...' : 'Analizar Ahora'}
+                </button>
               </div>
             </motion.div>
 
