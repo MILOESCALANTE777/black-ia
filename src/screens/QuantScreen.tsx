@@ -12,7 +12,7 @@ const QUANT_ASSETS = [
   { symbol: 'ETH/USD', name: 'Ethereum',   color: '#627EEA' },
   { symbol: 'EUR/USD', name: 'EUR/USD',    color: '#34C759' },
   { symbol: 'GBP/USD', name: 'GBP/USD',   color: '#8E8E93' },
-  { symbol: 'XAG/USD', name: 'Plata',      color: '#C0C0C0' },
+  { symbol: 'USD/JPY', name: 'USD/JPY',   color: '#FF3B30' },
 ];
 
 function ZScoreBar({ zScore, threshold = 2.5 }: { zScore: number; threshold?: number }) {

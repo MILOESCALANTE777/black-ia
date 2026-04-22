@@ -597,7 +597,6 @@ export async function runQuantAnalysis(symbol = 'SPX'): Promise<QuantAnalysis> {
     'SPX': 'S&P 500', 'DJI': 'Dow Jones', 'NDX': 'Nasdaq',
     'XAU/USD': 'Oro', 'BTC/USD': 'Bitcoin', 'ETH/USD': 'Ethereum',
     'EUR/USD': 'Euro / Dólar', 'GBP/USD': 'Libra / Dólar', 'USD/JPY': 'Dólar / Yen',
-    'XAG/USD': 'Plata',
   };
   const assetName = assetNames[symbol] || symbol;
 
