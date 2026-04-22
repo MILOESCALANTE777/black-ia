@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { TrendingUp, TrendingDown, RefreshCw, ChevronDown, ChevronUp, Activity, BarChart2, Newspaper } from 'lucide-react';
 import { runQuantAnalysis, type QuantAnalysis, type LogAnomalySignal, type NewsImpact } from '@/lib/quantModel';
+import { saveAnalysis, getCurrentUser } from '@/lib/supabase';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -237,6 +238,27 @@ export default function QuantScreen() {
       setAnalysis(result);
       if (result.metrics.lastSignal?.direction !== 'NONE') {
         setSignalExpiry(8 * TF_MINUTES[tf] * 60);
+      }
+      // Guardar en historial de Supabase si hay señal
+      try {
+        const currentUser = await getCurrentUser();
+        if (currentUser && result.metrics.lastSignal && result.metrics.lastSignal.direction !== 'NONE') {
+          const sig = result.metrics.lastSignal;
+          await saveAnalysis(currentUser.id, {
+            asset: sym,
+            timeframe: tf,
+            bias: sig.direction === 'LONG' ? 'bullish' : 'bearish',
+            confidence: Math.round(sig.signalStrength * 100),
+            strategies: { direction: sig.direction, zScore: sig.zScore },
+            analysis_type: 'quant',
+            entry_price: sig.entryPrice,
+            stop_loss: sig.stopLoss,
+            take_profit: sig.takeProfit,
+            z_score: sig.zScore,
+          });
+        }
+      } catch (saveErr) {
+        console.warn('No se pudo guardar en historial:', saveErr);
       }
     } catch (e) {
       setError('No se pudo ejecutar el análisis.');

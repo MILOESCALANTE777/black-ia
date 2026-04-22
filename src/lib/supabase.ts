@@ -55,10 +55,17 @@ export interface AnalysisHistory {
   // Resultado
   bias: 'bullish' | 'bearish' | 'neutral';
   confidence: number;
-  strategies: any; // JSON con las estrategias
+  strategies: any;
   
   // Metadata
   analysis_type: 'image' | 'news' | 'quant';
+
+  // Datos extra para quant
+  entry_price?: number;
+  stop_loss?: number;
+  take_profit?: number;
+  z_score?: number;
+  notes?: string;
 }
 
 // Funciones de autenticación
@@ -178,6 +185,27 @@ export async function getAnalysisHistory(userId: string, limit = 20): Promise<An
   }
   
   return data || [];
+}
+
+// Borrar un análisis individual
+export async function deleteAnalysis(userId: string, analysisId: string) {
+  const { error } = await supabase
+    .from('analysis_history')
+    .delete()
+    .eq('id', analysisId)
+    .eq('user_id', userId); // Seguridad: solo puede borrar sus propios análisis
+  
+  if (error) throw error;
+}
+
+// Borrar todo el historial
+export async function deleteAllAnalysis(userId: string) {
+  const { error } = await supabase
+    .from('analysis_history')
+    .delete()
+    .eq('user_id', userId);
+  
+  if (error) throw error;
 }
 
 // Funciones de favoritos

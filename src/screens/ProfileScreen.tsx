@@ -4,10 +4,10 @@ import {
   Bell, Palette, Globe, Volume2, HelpCircle,
   Mail, Star, FileText, ChevronRight, BookOpen, History,
   TrendingUp, TrendingDown, Minus, Clock, Pencil, Check, X,
-  Sun, Moon
+  Sun, Moon, Trash2, BarChart2, Camera, Newspaper
 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
-import { signOut, getAnalysisHistory, updateUserProfile, type AnalysisHistory } from '@/lib/supabase';
+import { signOut, getAnalysisHistory, updateUserProfile, deleteAnalysis, deleteAllAnalysis, type AnalysisHistory } from '@/lib/supabase';
 
 const SETTINGS_GROUPS_STATIC = [
   { titleKey: 'account' as const, items: [{ icon: BookOpen, labelKey: 'tradingPreferences' as const }, { icon: Bell, labelKey: 'notifications' as const }] },
@@ -36,6 +36,8 @@ export default function ProfileScreen() {
   const [history, setHistory] = useState<AnalysisHistory[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState('');
   const [savingName, setSavingName] = useState(false);
@@ -48,10 +50,31 @@ export default function ProfileScreen() {
     if (!user) return;
     setLoadingHistory(true);
     try {
-      const data = await getAnalysisHistory(user.id, 10);
+      const data = await getAnalysisHistory(user.id, 50);
       setHistory(data);
     } catch (e) { console.error(e); }
     finally { setLoadingHistory(false); }
+  };
+
+  const handleDeleteOne = async (id: string) => {
+    if (!user) return;
+    setDeletingId(id);
+    try {
+      await deleteAnalysis(user.id, id);
+      setHistory(prev => prev.filter(h => h.id !== id));
+      setUser({ ...user, total_analyses: Math.max(0, (user.total_analyses || 1) - 1) });
+    } catch (e) { console.error(e); }
+    finally { setDeletingId(null); }
+  };
+
+  const handleDeleteAll = async () => {
+    if (!user) return;
+    try {
+      await deleteAllAnalysis(user.id);
+      setHistory([]);
+      setUser({ ...user, total_analyses: 0 });
+      setConfirmDeleteAll(false);
+    } catch (e) { console.error(e); }
   };
 
   const handleSignOut = async () => {
@@ -182,7 +205,7 @@ export default function ProfileScreen() {
             {/* Analysis History */}
             {user && (
               <motion.button initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
-                onClick={() => setShowHistory(!showHistory)}
+                onClick={() => { setShowHistory(!showHistory); if (!showHistory && history.length === 0) loadHistory(); }}
                 className="w-full p-4 rounded-2xl flex items-center justify-between mb-4 active:scale-[0.98] transition-transform"
                 style={{ background: cardBg, border: `1px solid ${cardBorder}` }}>
                 <div className="flex items-center gap-3">
@@ -204,6 +227,34 @@ export default function ProfileScreen() {
               {showHistory && user && (
                 <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
                   exit={{ opacity: 0, height: 0 }} className="mb-4 overflow-hidden">
+
+                  {/* Header con borrar todo */}
+                  {history.length > 0 && (
+                    <div className="flex items-center justify-between mb-2 px-1">
+                      <span className="text-xs font-bold uppercase tracking-wider" style={{ color: textSecondary }}>
+                        {history.length} análisis
+                      </span>
+                      {confirmDeleteAll ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs" style={{ color: textSecondary }}>¿Borrar todo?</span>
+                          <button onClick={handleDeleteAll}
+                            className="text-xs font-bold px-2 py-1 rounded-lg text-white"
+                            style={{ background: '#FF3B30' }}>Sí</button>
+                          <button onClick={() => setConfirmDeleteAll(false)}
+                            className="text-xs font-bold px-2 py-1 rounded-lg"
+                            style={{ background: cardBorder, color: textSecondary }}>No</button>
+                        </div>
+                      ) : (
+                        <button onClick={() => setConfirmDeleteAll(true)}
+                          className="flex items-center gap-1 text-xs"
+                          style={{ color: '#FF3B30' }}>
+                          <Trash2 size={11} />
+                          Borrar todo
+                        </button>
+                      )}
+                    </div>
+                  )}
+
                   {loadingHistory ? (
                     <div className="p-4 flex gap-1 justify-center">
                       {[0,1,2].map((i) => (
@@ -218,32 +269,81 @@ export default function ProfileScreen() {
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      {history.map((item) => (
-                        <div key={item.id} className="p-3 rounded-xl" style={{ background: cardBg, border: `1px solid ${cardBorder}` }}>
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              {getBiasIcon(item.bias)}
-                              <span className="text-sm font-semibold" style={{ color: textPrimary }}>{item.asset}</span>
+                      {history.map((item) => {
+                        const typeIcon = item.analysis_type === 'quant'
+                          ? <BarChart2 size={13} color="#AF52DE" />
+                          : item.analysis_type === 'image'
+                          ? <Camera size={13} color="#007AFF" />
+                          : <Newspaper size={13} color="#FF9500" />;
+                        const typeLabel = item.analysis_type === 'quant' ? 'Quant'
+                          : item.analysis_type === 'image' ? 'Imagen' : 'Noticias';
+                        const typeColor = item.analysis_type === 'quant' ? '#AF52DE'
+                          : item.analysis_type === 'image' ? '#007AFF' : '#FF9500';
+
+                        return (
+                          <div key={item.id} className="p-3 rounded-xl"
+                            style={{ background: cardBg, border: `1px solid ${cardBorder}` }}>
+                            {/* Fila 1: activo + tipo + borrar */}
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                {getBiasIcon(item.bias)}
+                                <span className="text-sm font-semibold" style={{ color: textPrimary }}>{item.asset}</span>
+                                <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full font-medium"
+                                  style={{ color: typeColor, background: typeColor + '15' }}>
+                                  {typeIcon}
+                                  {typeLabel}
+                                </span>
+                              </div>
+                              <button
+                                onClick={() => handleDeleteOne(item.id)}
+                                disabled={deletingId === item.id}
+                                className="w-6 h-6 rounded-full flex items-center justify-center transition-all active:scale-90 disabled:opacity-50"
+                                style={{ background: 'rgba(255,59,48,0.1)' }}>
+                                {deletingId === item.id
+                                  ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}>
+                                      <Trash2 size={11} color="#FF3B30" />
+                                    </motion.div>
+                                  : <Trash2 size={11} color="#FF3B30" />}
+                              </button>
                             </div>
-                            <span className="text-xs" style={{ color: textSecondary }}>{item.timeframe}</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-bold px-2 py-0.5 rounded-full"
-                                style={{ color: getBiasColor(item.bias), background: getBiasColor(item.bias) + '20' }}>
-                                {item.confidence}%
-                              </span>
-                              <span className="text-xs" style={{ color: textSecondary }}>
-                                {item.bias === 'bullish' ? t('bullish') : item.bias === 'bearish' ? t('bearish') : t('neutral')}
-                              </span>
-                            </div>
+
+                            {/* Fila 2: datos según tipo */}
+                            {item.analysis_type === 'quant' && item.entry_price ? (
+                              <div className="grid grid-cols-3 gap-1.5 mb-2">
+                                <div className="p-1.5 rounded-lg text-center" style={{ background: isLight ? '#F0F0F5' : '#2C2C2E' }}>
+                                  <div className="text-xs" style={{ color: textSecondary }}>Entrada</div>
+                                  <div className="text-xs font-bold" style={{ color: textPrimary }}>{item.entry_price?.toLocaleString()}</div>
+                                </div>
+                                <div className="p-1.5 rounded-lg text-center" style={{ background: 'rgba(255,59,48,0.08)' }}>
+                                  <div className="text-xs text-[#FF3B30]">Stop</div>
+                                  <div className="text-xs font-bold text-[#FF3B30]">{item.stop_loss?.toLocaleString()}</div>
+                                </div>
+                                <div className="p-1.5 rounded-lg text-center" style={{ background: 'rgba(52,199,89,0.08)' }}>
+                                  <div className="text-xs text-[#34C759]">Target</div>
+                                  <div className="text-xs font-bold text-[#34C759]">{item.take_profit?.toLocaleString()}</div>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                                  style={{ color: getBiasColor(item.bias), background: getBiasColor(item.bias) + '20' }}>
+                                  {item.confidence}%
+                                </span>
+                                <span className="text-xs" style={{ color: textSecondary }}>
+                                  {item.bias === 'bullish' ? t('bullish') : item.bias === 'bearish' ? t('bearish') : t('neutral')}
+                                </span>
+                                <span className="text-xs" style={{ color: textSecondary }}>· {item.timeframe}</span>
+                              </div>
+                            )}
+
+                            {/* Fila 3: hora */}
                             <div className="flex items-center gap-1 text-xs" style={{ color: isLight ? '#8E8E93' : '#636366' }}>
                               <Clock size={10} />
                               <span>{formatDate(item.created_at)}</span>
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </motion.div>
