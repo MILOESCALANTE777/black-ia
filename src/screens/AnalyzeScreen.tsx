@@ -78,7 +78,7 @@ Responde ÚNICAMENTE en este JSON (sin texto adicional):
 
   try {
     const data = await openaiPost({
-      model: 'gpt-4o',
+      model: 'meta-llama/llama-4-scout-17b-16e-instruct',
       messages: [{
         role: 'user',
         content: [

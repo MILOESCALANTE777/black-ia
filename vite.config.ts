@@ -11,7 +11,7 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/api/openai': {
-        target: 'https://api.openai.com',
+        target: 'https://api.groq.com',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/openai/, ''),
         secure: true,

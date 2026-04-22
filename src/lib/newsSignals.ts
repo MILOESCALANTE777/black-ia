@@ -237,7 +237,7 @@ REGLAS CRÍTICAS:
 
   try {
     const data = await openaiPost({
-      model: 'gpt-4o',
+      model: 'llama-3.3-70b-versatile',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.15,
       max_tokens: 3000,

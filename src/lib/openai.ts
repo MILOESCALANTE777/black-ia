@@ -1,21 +1,28 @@
 import axios from 'axios';
 
-const OPENAI_KEY = import.meta.env.VITE_OPENAI_API_KEY;
+// Groq es compatible con la API de OpenAI — mismo formato, diferente key y modelo
+const GROQ_KEY = import.meta.env.VITE_GROQ_API_KEY;
+
+// Modelo principal: llama-3.3-70b-versatile (el mejor de Groq, gratis)
+export const AI_MODEL = 'llama-3.3-70b-versatile';
+
+// Para análisis de imágenes usamos llama-3.2-11b-vision-preview (soporta imágenes)
+export const VISION_MODEL = 'meta-llama/llama-4-scout-17b-16e-instruct';
 
 /**
- * Llama a la API de OpenAI a través del proxy.
- * - Desarrollo: Vite proxy en vite.config.ts → /api/openai → api.openai.com
- * - Producción: Express proxy en server.js → /api/openai → api.openai.com
- * El proxy funciona en ambos entornos, no se necesita fallback.
+ * Llama a la API de Groq (compatible con OpenAI).
+ * Proxy: /api/openai → https://api.groq.com
+ * - Desarrollo: Vite proxy (vite.config.ts)
+ * - Producción: Express proxy (server.js)
  */
 export async function openaiPost(body: object, timeout = 45000) {
-  if (!OPENAI_KEY) {
-    throw new Error('VITE_OPENAI_API_KEY no configurada');
+  if (!GROQ_KEY) {
+    throw new Error('VITE_GROQ_API_KEY no configurada');
   }
 
-  const res = await axios.post('/api/openai/v1/chat/completions', body, {
+  const res = await axios.post('/api/openai/openai/v1/chat/completions', body, {
     headers: {
-      Authorization: `Bearer ${OPENAI_KEY}`,
+      Authorization: `Bearer ${GROQ_KEY}`,
       'Content-Type': 'application/json',
     },
     timeout,

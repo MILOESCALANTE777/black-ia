@@ -40,15 +40,15 @@ app.get('/api/yahoo/chart/:symbol', (req, res) => {
 
 // ─── API Proxy routes ─────────────────────────────────────────────────────────
 
-// OpenAI proxy
+// Groq proxy (reemplaza OpenAI - gratis)
 app.use('/api/openai', createProxyMiddleware({
-  target: 'https://api.openai.com',
+  target: 'https://api.groq.com',
   changeOrigin: true,
   pathRewrite: { '^/api/openai': '' },
   on: {
     error: (err, req, res) => {
-      console.error('[OpenAI proxy error]', err.message);
-      res.status(502).json({ error: 'OpenAI proxy error', message: err.message });
+      console.error('[Groq proxy error]', err.message);
+      res.status(502).json({ error: 'Groq proxy error', message: err.message });
     },
   },
 }));

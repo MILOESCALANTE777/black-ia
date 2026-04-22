@@ -31,7 +31,7 @@ Responde siempre en español, de forma concisa y accionable. Cuando des señales
 
 async function askGPT(messages: { role: string; content: string }[]): Promise<string> {
   const data = await openaiPost({
-    model: 'gpt-4o',
+    model: 'llama-3.3-70b-versatile',
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
       ...messages,
