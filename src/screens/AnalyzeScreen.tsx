@@ -174,7 +174,7 @@ function AnalysisResult({ result, onReset }: { result: VisionAnalysis; onReset: 
   const biasLabel = result.bias === 'bullish' ? 'ALCISTA' : result.bias === 'bearish' ? 'BAJISTA' : 'NEUTRAL';
 
   return (
-    <div className="flex-1 overflow-y-auto no-scrollbar px-5 md:px-8 pb-8">
+    <div className="px-5 md:px-8 pb-8 pt-2">
       {/* Bias header */}
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mt-4 p-4 rounded-2xl" style={{ background: '#1C1C1E', border: `1px solid ${biasColor}30` }}>
         <div className="flex items-center justify-between mb-3">
@@ -376,30 +376,141 @@ export default function AnalyzeScreen() {
 
   // ── Analyzing state ──
   if (isAnalyzing) {
+    const steps = [
+      { icon: '🔍', label: 'Procesando imagen...', color: '#AF52DE' },
+      { icon: '📊', label: 'Detectando estructura de mercado...', color: '#007AFF' },
+      { icon: '🧱', label: 'Identificando order blocks...', color: '#FF9500' },
+      { icon: '📈', label: 'Calculando soportes y resistencias...', color: '#34C759' },
+      { icon: '🎯', label: 'Generando estrategias...', color: '#FF3B30' },
+    ];
+
     return (
-      <div className="flex-1 flex flex-col items-center justify-center bg-black gap-5 px-8">
-        <motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}>
-          <Brain size={40} color="#AF52DE" />
+      <div className="flex-1 flex flex-col items-center justify-center bg-black relative overflow-hidden px-8">
+
+        {/* Fondo animado con partículas */}
+        {[...Array(12)].map((_, i) => (
+          <motion.div
+            key={i}
+            className="absolute rounded-full"
+            style={{
+              width: Math.random() * 6 + 2,
+              height: Math.random() * 6 + 2,
+              background: ['#AF52DE', '#007AFF', '#34C759', '#FF9500'][i % 4],
+              left: `${Math.random() * 100}%`,
+              top: `${Math.random() * 100}%`,
+              opacity: 0.3,
+            }}
+            animate={{
+              y: [0, -30, 0],
+              opacity: [0.1, 0.5, 0.1],
+              scale: [1, 1.5, 1],
+            }}
+            transition={{
+              duration: 2 + Math.random() * 2,
+              repeat: Infinity,
+              delay: Math.random() * 2,
+              ease: 'easeInOut',
+            }}
+          />
+        ))}
+
+        {/* Anillo exterior giratorio */}
+        <div className="relative mb-8">
+          <motion.div
+            className="w-32 h-32 rounded-full"
+            style={{ border: '2px solid transparent', borderTopColor: '#AF52DE', borderRightColor: '#007AFF' }}
+            animate={{ rotate: 360 }}
+            transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+          />
+          {/* Anillo medio */}
+          <motion.div
+            className="absolute inset-3 rounded-full"
+            style={{ border: '2px solid transparent', borderTopColor: '#FF9500', borderLeftColor: '#34C759' }}
+            animate={{ rotate: -360 }}
+            transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
+          />
+          {/* Centro con icono */}
+          <div className="absolute inset-0 flex items-center justify-center">
+            <motion.div
+              animate={{ scale: [1, 1.15, 1] }}
+              transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
+              className="w-16 h-16 rounded-full flex items-center justify-center"
+              style={{ background: 'linear-gradient(135deg, #AF52DE22, #007AFF22)' }}
+            >
+              <Brain size={28} color="#AF52DE" />
+            </motion.div>
+          </div>
+        </div>
+
+        {/* Título */}
+        <motion.div
+          className="text-center mb-6"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <p className="text-white font-bold text-xl mb-1">Analizando con IA</p>
+          <p className="text-sm text-[#636366]">Procesando tu gráfico de trading...</p>
         </motion.div>
-        <div className="text-center">
-          <p className="text-white font-bold text-lg">Analizando gráfico con GPT-4o</p>
-          <p className="text-sm text-[#636366] mt-1">Detectando order blocks, EMAs, soportes, resistencias y estrategias...</p>
+
+        {/* Barra de progreso animada */}
+        <div className="w-full max-w-xs mb-6">
+          <div className="h-1 rounded-full overflow-hidden" style={{ background: '#1C1C1E' }}>
+            <motion.div
+              className="h-full rounded-full"
+              style={{ background: 'linear-gradient(90deg, #AF52DE, #007AFF, #34C759)' }}
+              animate={{ x: ['-100%', '100%'] }}
+              transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+            />
+          </div>
         </div>
-        <div className="flex gap-1.5">
-          {[0, 1, 2].map((i) => (
-            <motion.div key={i} className="w-2.5 h-2.5 rounded-full bg-[#AF52DE]"
-              animate={{ scale: [0, 1, 0] }} transition={{ duration: 1.4, repeat: Infinity, delay: i * 0.2 }} />
-          ))}
-        </div>
-        <div className="w-full max-w-xs space-y-2 mt-2">
-          {['Procesando imagen...', 'Identificando patrones...', 'Calculando niveles...', 'Generando estrategias...'].map((step, i) => (
-            <motion.div key={step} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.6 }}
-              className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-[#AF52DE]" />
-              <span className="text-xs text-[#636366]">{step}</span>
+
+        {/* Pasos con animación secuencial */}
+        <div className="w-full max-w-xs space-y-2.5">
+          {steps.map((step, i) => (
+            <motion.div
+              key={step.label}
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: i * 0.7, duration: 0.4 }}
+              className="flex items-center gap-3 px-4 py-2.5 rounded-xl"
+              style={{ background: '#1C1C1E' }}
+            >
+              <motion.span
+                className="text-base"
+                animate={{ scale: [1, 1.3, 1] }}
+                transition={{ duration: 0.6, delay: i * 0.7 + 0.2, repeat: Infinity, repeatDelay: 3 }}
+              >
+                {step.icon}
+              </motion.span>
+              <span className="text-xs font-medium" style={{ color: step.color }}>{step.label}</span>
+              <motion.div
+                className="ml-auto w-1.5 h-1.5 rounded-full"
+                style={{ background: step.color }}
+                animate={{ opacity: [0, 1, 0] }}
+                transition={{ duration: 1, delay: i * 0.7, repeat: Infinity }}
+              />
             </motion.div>
           ))}
         </div>
+
+        {/* Imagen en miniatura si existe */}
+        {previewImage && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.3 }}
+            className="mt-6 relative"
+          >
+            <img src={previewImage} alt="chart" className="w-48 h-28 object-cover rounded-xl opacity-60" />
+            {/* Línea de escaneo */}
+            <motion.div
+              className="absolute inset-x-0 h-0.5 rounded-full"
+              style={{ background: 'linear-gradient(90deg, transparent, #AF52DE, transparent)' }}
+              animate={{ top: ['0%', '100%', '0%'] }}
+              transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+            />
+          </motion.div>
+        )}
       </div>
     );
   }
@@ -407,24 +518,28 @@ export default function AnalyzeScreen() {
   // ── Result state ──
   if (analysisResult) {
     return (
-      <div className="flex-1 flex flex-col bg-black">
-        <div className="shrink-0 flex items-center justify-between px-6 md:px-8 py-4 md:py-5"
-          style={{ background: 'rgba(0,0,0,0.9)', backdropFilter: 'blur(20px)', borderBottom: '1px solid #1C1C1E' }}>
+      <div className="flex-1 flex flex-col bg-black overflow-hidden">
+        {/* Header fijo */}
+        <div className="shrink-0 flex items-center justify-between px-6 md:px-8 py-4"
+          style={{ background: 'rgba(0,0,0,0.95)', backdropFilter: 'blur(20px)', borderBottom: '1px solid #1C1C1E' }}>
           <button onClick={handleReset} className="p-1"><X size={22} color="#FFFFFF" /></button>
-          <h3 className="text-base font-bold text-white absolute left-1/2 -translate-x-1/2 md:static md:translate-x-0">
-            Análisis de Gráfico
-          </h3>
+          <h3 className="text-base font-bold text-white">Análisis de Gráfico</h3>
           <button onClick={handleAnalyze} className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: '#1C1C1E' }}>
             <RefreshCw size={14} color="#8E8E93" />
           </button>
         </div>
-        {/* Show image thumbnail */}
+
+        {/* Imagen fija debajo del header */}
         {previewImage && (
-          <div className="shrink-0 px-5 md:px-8 pt-3">
-            <img src={previewImage} alt="chart" className="w-full h-32 md:h-48 object-cover rounded-2xl" />
+          <div className="shrink-0 px-5 md:px-8 pt-3 pb-1">
+            <img src={previewImage} alt="chart" className="w-full h-36 md:h-52 object-cover rounded-2xl" />
           </div>
         )}
-        <AnalysisResult result={analysisResult} onReset={handleReset} />
+
+        {/* Contenido scrolleable */}
+        <div className="flex-1 overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
+          <AnalysisResult result={analysisResult} onReset={handleReset} />
+        </div>
       </div>
     );
   }
