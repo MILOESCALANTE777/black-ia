@@ -7,7 +7,6 @@ interface Message {
   id: number;
   text: string;
   sender: 'user' | 'ai';
-  loading?: boolean;
 }
 
 const quickPrompts = [
@@ -25,17 +24,13 @@ const SYSTEM_PROMPT = `Eres un asistente experto en trading e inversiones llamad
 - Gestión de riesgo: position sizing, stop loss, take profit, ratio R:R
 - Mercados: Forex (XAU/USD, EUR/USD, GBP/USD), Cripto (BTC, ETH), Índices (SP500, Nasdaq, Dow Jones), Acciones
 - Estrategias cuantitativas: mean reversion, momentum, detección de anomalías estadísticas
-- Modelo Statistical Edge Reversion: BB(20,2) + RSI extremo + volumen anómalo >150% MA20
 
-Responde siempre en español, de forma concisa y accionable. Cuando des señales incluye: dirección (LONG/SHORT), entrada, stop loss y take profit. Usa emojis con moderación para hacer las respuestas más legibles.`;
+Responde siempre en español, de forma concisa y accionable. Cuando des señales incluye: dirección (LONG/SHORT), entrada, stop loss y take profit.`;
 
 async function askGPT(messages: { role: string; content: string }[]): Promise<string> {
   const data = await openaiPost({
     model: 'llama-3.3-70b-versatile',
-    messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      ...messages,
-    ],
+    messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages],
     temperature: 0.4,
     max_tokens: 600,
   }, 30000);
@@ -62,24 +57,21 @@ export default function AIBrainScreen() {
 
   const sendMessage = async (text: string) => {
     if (!text.trim() || isTyping) return;
-
     const userMsg: Message = { id: Date.now(), text, sender: 'user' };
     setMessages(prev => [...prev, userMsg]);
     setInputText('');
     setIsTyping(true);
-
-    // Build conversation history for GPT (exclude loading messages)
-    const history = [...messages, userMsg]
-      .filter(m => !m.loading)
-      .map(m => ({ role: m.sender === 'user' ? 'user' : 'assistant', content: m.text }));
-
+    const history = [...messages, userMsg].map(m => ({
+      role: m.sender === 'user' ? 'user' : 'assistant',
+      content: m.text,
+    }));
     try {
       const response = await askGPT(history);
       setMessages(prev => [...prev, { id: Date.now() + 1, text: response, sender: 'ai' }]);
     } catch {
       setMessages(prev => [...prev, {
         id: Date.now() + 1,
-        text: 'Lo siento, no pude conectarme con la IA en este momento. Verifica tu conexión e intenta de nuevo.',
+        text: 'Lo siento, no pude conectarme con la IA. Verifica tu conexión e intenta de nuevo.',
         sender: 'ai',
       }]);
     } finally {
@@ -94,97 +86,86 @@ export default function AIBrainScreen() {
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-black md:flex-row">
+    <div className="flex-1 flex flex-col theme-bg-app md:flex-row">
 
-      {/* Desktop sidebar panel */}
-      <div className="hidden md:flex flex-col w-64 shrink-0 border-r border-[#1C1C1E] p-5">
+      {/* ── Sidebar desktop ── */}
+      <div className="hidden md:flex flex-col w-64 shrink-0 p-5"
+        style={{ borderRight: '1px solid var(--border-subtle)' }}>
         <div className="flex items-center gap-2.5 mb-6">
-          <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: 'rgba(175,82,222,0.2)' }}>
+          <div className="w-9 h-9 rounded-full flex items-center justify-center"
+            style={{ background: 'rgba(175,82,222,0.15)' }}>
             <Brain size={20} color="#AF52DE" />
           </div>
           <div className="flex-1">
-            <h3 className="text-base font-semibold text-white">AI Brain</h3>
+            <h3 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>AI Brain</h3>
             <div className="flex items-center gap-1.5">
-              <div className="w-1.5 h-1.5 rounded-full bg-[#34C759]" />
-              <span className="text-xs text-[#8E8E93]">Online</span>
+              <div className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--green)' }} />
+              <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>Online</span>
             </div>
           </div>
           {messages.length > 1 && (
             <button onClick={() => setShowClearConfirm(true)}
-              className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#2C2C2E] transition-colors"
-              title="Borrar conversación">
-              <Trash2 size={14} color="#636366" />
+              className="w-8 h-8 rounded-full flex items-center justify-center transition-colors"
+              style={{ background: 'var(--bg-card-2)' }}>
+              <Trash2 size={14} style={{ color: 'var(--text-muted)' }} />
             </button>
           )}
         </div>
-
-        <p className="text-xs text-[#636366] mb-5">Quick prompts to get started:</p>
+        <p className="text-xs mb-4" style={{ color: 'var(--text-muted)' }}>Quick prompts:</p>
         <div className="flex flex-col gap-2">
           {quickPrompts.map((prompt) => (
-            <button
-              key={prompt}
-              onClick={() => sendMessage(prompt)}
-              disabled={isTyping}
-              className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm text-[#8E8E93] bg-[#1C1C1E] border border-[#38383A] hover:bg-[#2C2C2E] hover:text-white transition-all text-left disabled:opacity-40"
-            >
-              <Zap size={14} color="#636366" />
+            <button key={prompt} onClick={() => sendMessage(prompt)} disabled={isTyping}
+              className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm text-left disabled:opacity-40 transition-all"
+              style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
+              <Zap size={14} style={{ color: 'var(--text-muted)' }} />
               {prompt}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Chat area */}
+      {/* ── Chat area ── */}
       <div className="flex-1 flex flex-col min-h-0">
-        {/* Mobile Header */}
-        <div
-          className="shrink-0 flex items-center gap-3 px-6 py-4 md:px-8 md:py-5 md:border-b md:border-[#1C1C1E]"
-          style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(20px)' }}
-        >
-          <div className="w-9 h-9 rounded-full flex items-center justify-center md:hidden" style={{ background: 'rgba(175,82,222,0.2)' }}>
+
+        {/* Header */}
+        <div className="shrink-0 flex items-center gap-3 px-6 py-4 md:px-8 md:py-5 theme-bg-nav"
+          style={{ backdropFilter: 'blur(20px)', borderBottom: '1px solid var(--border-subtle)' }}>
+          <div className="w-9 h-9 rounded-full flex items-center justify-center md:hidden"
+            style={{ background: 'rgba(175,82,222,0.15)' }}>
             <Brain size={20} color="#AF52DE" />
           </div>
           <div className="flex-1">
-            <h3 className="text-lg font-semibold text-white md:text-2xl md:font-bold">AI Brain</h3>
+            <h3 className="text-lg font-semibold md:text-2xl md:font-bold"
+              style={{ color: 'var(--text-primary)' }}>AI Brain</h3>
             <div className="flex items-center gap-1.5 md:hidden">
-              <div className="w-1.5 h-1.5 rounded-full bg-[#34C759]" />
-              <span className="text-xs text-[#8E8E93]">Online</span>
+              <div className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--green)' }} />
+              <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>Online</span>
             </div>
           </div>
-          {/* Clear chat button */}
           {messages.length > 1 && (
-            <button
-              onClick={() => setShowClearConfirm(true)}
+            <button onClick={() => setShowClearConfirm(true)}
               className="w-9 h-9 rounded-full flex items-center justify-center active:scale-90 transition-transform"
-              style={{ background: '#1C1C1E', border: '1px solid #38383A' }}
-            >
-              <Trash2 size={15} color="#636366" />
+              style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+              <Trash2 size={15} style={{ color: 'var(--text-muted)' }} />
             </button>
           )}
         </div>
 
-        {/* Clear confirm banner */}
+        {/* Clear confirm */}
         {showClearConfirm && (
-          <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
+          <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
             className="shrink-0 flex items-center justify-between px-5 py-3 mx-4 mt-2 rounded-2xl"
-            style={{ background: 'rgba(255,59,48,0.12)', border: '1px solid rgba(255,59,48,0.3)' }}
-          >
-            <span className="text-sm text-white">¿Borrar toda la conversación?</span>
+            style={{ background: 'rgba(215,0,21,0.1)', border: '1px solid rgba(215,0,21,0.25)' }}>
+            <span className="text-sm" style={{ color: 'var(--text-primary)' }}>¿Borrar toda la conversación?</span>
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowClearConfirm(false)}
-                className="px-3 py-1.5 rounded-full text-xs font-medium text-[#8E8E93]"
-                style={{ background: '#2C2C2E' }}
-              >
+              <button onClick={() => setShowClearConfirm(false)}
+                className="px-3 py-1.5 rounded-full text-xs font-medium"
+                style={{ background: 'var(--bg-card-2)', color: 'var(--text-secondary)' }}>
                 Cancelar
               </button>
-              <button
-                onClick={clearChat}
+              <button onClick={clearChat}
                 className="px-3 py-1.5 rounded-full text-xs font-bold text-white"
-                style={{ background: '#FF3B30' }}
-              >
+                style={{ background: 'var(--red)' }}>
                 Borrar
               </button>
             </div>
@@ -194,19 +175,14 @@ export default function AIBrainScreen() {
         {/* Messages */}
         <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-4 md:px-8 py-4 space-y-3">
           {messages.map((msg) => (
-            <motion.div
-              key={msg.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
-            >
-              <div
-                className={`max-w-[80%] md:max-w-[65%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${
-                  msg.sender === 'user'
-                    ? 'bg-[#007AFF] text-white rounded-br-md'
-                    : 'bg-[#1C1C1E] text-white rounded-bl-md'
-                }`}
-              >
+            <motion.div key={msg.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+              className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div className="max-w-[80%] md:max-w-[65%] px-4 py-3 text-sm leading-relaxed"
+                style={{
+                  background: msg.sender === 'user' ? 'var(--blue)' : 'var(--bg-card)',
+                  color: msg.sender === 'user' ? '#FFFFFF' : 'var(--text-primary)',
+                  borderRadius: msg.sender === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                }}>
                 {msg.text}
               </div>
             </motion.div>
@@ -215,10 +191,12 @@ export default function AIBrainScreen() {
           {/* Typing indicator */}
           {isTyping && (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex justify-start">
-              <div className="px-4 py-3 rounded-2xl rounded-bl-md bg-[#1C1C1E] flex items-center gap-1.5">
-                {[0, 1, 2].map(i => (
-                  <motion.div key={i} className="w-2 h-2 rounded-full bg-[#636366]"
-                    animate={{ scale: [0.6, 1, 0.6], opacity: [0.4, 1, 0.4] }}
+              <div className="px-4 py-3 flex items-center gap-1.5"
+                style={{ background: 'var(--bg-card)', borderRadius: '18px 18px 18px 4px' }}>
+                {[0,1,2].map(i => (
+                  <motion.div key={i} className="w-2 h-2 rounded-full"
+                    style={{ background: 'var(--text-muted)' }}
+                    animate={{ scale: [0.6,1,0.6], opacity: [0.4,1,0.4] }}
                     transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }} />
                 ))}
               </div>
@@ -226,16 +204,14 @@ export default function AIBrainScreen() {
           )}
         </div>
 
-        {/* Mobile Quick Prompts */}
+        {/* Mobile quick prompts */}
         {messages.length <= 2 && (
           <div className="shrink-0 px-4 pb-2 md:hidden">
             <div className="flex gap-2 overflow-x-auto no-scrollbar">
               {quickPrompts.map((prompt) => (
-                <button
-                  key={prompt}
-                  onClick={() => sendMessage(prompt)}
-                  className="shrink-0 px-4 py-2 rounded-full text-sm font-medium bg-[#1C1C1E] text-[#8E8E93] border border-[#38383A] active:bg-[#2C2C2E] transition-colors"
-                >
+                <button key={prompt} onClick={() => sendMessage(prompt)}
+                  className="shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-colors"
+                  style={{ background: 'var(--bg-card)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
                   {prompt}
                 </button>
               ))}
@@ -244,34 +220,29 @@ export default function AIBrainScreen() {
         )}
 
         {/* Input */}
-        <div className="shrink-0 px-4 md:px-8 py-3 md:py-4 flex items-center gap-2 border-t border-[#1C1C1E]">
-          <div className="flex-1 flex items-center bg-[#1C1C1E] rounded-full px-4 py-2.5 border border-[#38383A]">
-            <input
-              ref={inputRef}
-              type="text"
-              value={inputText}
+        <div className="shrink-0 px-4 md:px-8 py-3 md:py-4 flex items-center gap-2"
+          style={{ borderTop: '1px solid var(--border-subtle)' }}>
+          <div className="flex-1 flex items-center rounded-full px-4 py-2.5"
+            style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+            <input ref={inputRef} type="text" value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && sendMessage(inputText)}
               placeholder={isTyping ? 'AI está respondiendo...' : 'Pregunta sobre cualquier activo...'}
               disabled={isTyping}
-              className="flex-1 bg-transparent text-white text-sm outline-none placeholder:text-[#636366] disabled:opacity-50"
-            />
+              className="flex-1 bg-transparent text-sm outline-none disabled:opacity-50"
+              style={{ color: 'var(--text-primary)' }} />
           </div>
-          <button
-            onClick={() => sendMessage(inputText)}
-            disabled={isTyping || !inputText.trim()}
+          <button onClick={() => sendMessage(inputText)} disabled={isTyping || !inputText.trim()}
             className="w-10 h-10 rounded-full flex items-center justify-center active:scale-90 transition-all disabled:opacity-40"
-            style={{ background: isTyping || !inputText.trim() ? '#1C1C1E' : '#007AFF' }}
-          >
-            {isTyping ? (
-              <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}>
-                <Brain size={16} color="#636366" />
-              </motion.div>
-            ) : (
-              <Send size={18} color="#FFFFFF" />
-            )}
+            style={{ background: isTyping || !inputText.trim() ? 'var(--bg-card)' : 'var(--blue)' }}>
+            {isTyping
+              ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}>
+                  <Brain size={16} style={{ color: 'var(--text-muted)' }} />
+                </motion.div>
+              : <Send size={18} color="#FFFFFF" />}
           </button>
         </div>
+
       </div>
     </div>
   );
