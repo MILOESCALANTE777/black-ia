@@ -54,6 +54,22 @@ const TF_MINUTES: Record<string, number> = { '15min': 15, '1h': 60, '4h': 240 };
 
 // ─── Signal Card minimalista ──────────────────────────────────────────────────
 
+function formatSignalTime(datetime: string): string {
+  // Formatea la hora exacta de la señal en formato legible
+  try {
+    const d = new Date(datetime);
+    return d.toLocaleTimeString('es-MX', {
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      timeZone: 'America/New_York',
+    }) + ' NY · ' + d.toLocaleDateString('es-MX', {
+      day: '2-digit', month: 'short',
+      timeZone: 'America/New_York',
+    });
+  } catch {
+    return datetime;
+  }
+}
+
 function SignalCard({ sig, currentPrice, isLatest }: { sig: LogAnomalySignal; currentPrice?: number; isLatest?: boolean }) {
   const [open, setOpen] = useState(isLatest || false);
   const dir = sig.direction;
@@ -71,8 +87,10 @@ function SignalCard({ sig, currentPrice, isLatest }: { sig: LogAnomalySignal; cu
   return (
     <div onClick={() => setOpen(!open)} className="rounded-2xl cursor-pointer transition-all"
       style={{ background: '#1C1C1E', border: `1px solid ${status === 'ACTIVE' ? color + '50' : '#2C2C2E'}` }}>
+
+      {/* Fila principal */}
       <div className="flex items-center gap-3 px-4 py-3.5">
-        {/* Dirección */}
+        {/* Icono dirección */}
         <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 relative"
           style={{ background: color + '15' }}>
           {dir === 'LONG' ? <TrendingUp size={18} color={color} /> : <TrendingDown size={18} color={color} />}
@@ -82,16 +100,19 @@ function SignalCard({ sig, currentPrice, isLatest }: { sig: LogAnomalySignal; cu
           )}
         </div>
 
-        {/* Info */}
+        {/* Dirección + hora */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-bold" style={{ color }}>{dir}</span>
+          <div className="flex items-center gap-2 mb-0.5">
+            <span className="text-sm font-black" style={{ color }}>{dir}</span>
             <span className="text-xs font-semibold px-2 py-0.5 rounded-full"
               style={{ color: statusColor[status], background: statusColor[status] + '15' }}>
               {statusLabel[status]}
             </span>
           </div>
-          <span className="text-xs text-[#636366]">{sig.timestamp}</span>
+          {/* Hora exacta */}
+          <span className="text-xs font-mono" style={{ color: '#8E8E93' }}>
+            🕐 {formatSignalTime(sig.timestamp)}
+          </span>
         </div>
 
         {/* Fuerza */}
@@ -102,33 +123,37 @@ function SignalCard({ sig, currentPrice, isLatest }: { sig: LogAnomalySignal; cu
         {open ? <ChevronUp size={14} color="#636366" /> : <ChevronDown size={14} color="#636366" />}
       </div>
 
+      {/* Precios siempre visibles debajo */}
+      <div className="grid grid-cols-3 gap-2 px-4 pb-3">
+        <div className="p-2.5 rounded-xl text-center" style={{ background: '#2C2C2E' }}>
+          <div className="text-xs text-[#636366] mb-0.5">Entrada</div>
+          <div className="text-sm font-black text-white">{sig.entryPrice.toLocaleString()}</div>
+        </div>
+        <div className="p-2.5 rounded-xl text-center" style={{ background: 'rgba(255,59,48,0.12)' }}>
+          <div className="text-xs text-[#FF3B30] mb-0.5">Stop Loss</div>
+          <div className="text-sm font-black text-[#FF3B30]">{sig.stopLoss.toLocaleString()}</div>
+        </div>
+        <div className="p-2.5 rounded-xl text-center" style={{ background: 'rgba(52,199,89,0.12)' }}>
+          <div className="text-xs text-[#34C759] mb-0.5">Take Profit</div>
+          <div className="text-sm font-black text-[#34C759]">{sig.takeProfit.toLocaleString()}</div>
+        </div>
+      </div>
+
+      {/* Detalle expandible */}
       <AnimatePresence>
         {open && (
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }}>
-            <div className="px-4 pb-4 pt-1 border-t border-[#2C2C2E] space-y-3">
-              {/* Niveles */}
-              <div className="grid grid-cols-3 gap-2">
-                <div className="p-2.5 rounded-xl text-center" style={{ background: '#2C2C2E' }}>
-                  <div className="text-xs text-[#636366] mb-0.5">Entrada</div>
-                  <div className="text-xs font-bold text-white">{sig.entryPrice.toLocaleString()}</div>
-                </div>
-                <div className="p-2.5 rounded-xl text-center" style={{ background: 'rgba(255,59,48,0.1)' }}>
-                  <div className="text-xs text-[#FF3B30] mb-0.5">Stop</div>
-                  <div className="text-xs font-bold text-[#FF3B30]">{sig.stopLoss.toLocaleString()}</div>
-                </div>
-                <div className="p-2.5 rounded-xl text-center" style={{ background: 'rgba(52,199,89,0.1)' }}>
-                  <div className="text-xs text-[#34C759] mb-0.5">Target</div>
-                  <div className="text-xs font-bold text-[#34C759]">{sig.takeProfit.toLocaleString()}</div>
-                </div>
-              </div>
-              {/* Barra de progreso */}
+            <div className="px-4 pb-4 pt-1 border-t border-[#2C2C2E] space-y-2">
+              {/* Barra de progreso precio actual */}
               {currentPrice && dir !== 'NONE' && (
                 <div>
                   <div className="flex justify-between text-xs text-[#636366] mb-1">
-                    <span>SL</span>
-                    <span style={{ color: statusColor[status] }}>Precio: {currentPrice.toLocaleString()}</span>
-                    <span>TP</span>
+                    <span>SL {sig.stopLoss.toLocaleString()}</span>
+                    <span style={{ color: statusColor[status] }}>
+                      Ahora: {currentPrice.toLocaleString()}
+                    </span>
+                    <span>TP {sig.takeProfit.toLocaleString()}</span>
                   </div>
                   <div className="h-1.5 rounded-full overflow-hidden" style={{ background: '#2C2C2E' }}>
                     {(() => {
@@ -136,9 +161,18 @@ function SignalCard({ sig, currentPrice, isLatest }: { sig: LogAnomalySignal; cu
                       const pos = dir === 'LONG'
                         ? Math.min(100, Math.max(0, ((currentPrice - sig.stopLoss) / range) * 100))
                         : Math.min(100, Math.max(0, ((sig.stopLoss - currentPrice) / range) * 100));
-                      return <div className="h-full rounded-full" style={{ width: `${pos}%`, background: statusColor[status] }} />;
+                      return <div className="h-full rounded-full transition-all" style={{ width: `${pos}%`, background: statusColor[status] }} />;
                     })()}
                   </div>
+                </div>
+              )}
+              {/* R:R */}
+              {sig.direction !== 'NONE' && (
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-[#636366]">Ratio R:R</span>
+                  <span className="font-bold text-white">
+                    1:{(Math.abs(sig.takeProfit - sig.entryPrice) / Math.abs(sig.stopLoss - sig.entryPrice)).toFixed(1)}
+                  </span>
                 </div>
               )}
             </div>
@@ -327,7 +361,7 @@ export default function QuantScreen() {
                         <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: lastSigColor }} />
                       </div>
                       <div className="text-xs text-[#8E8E93]">
-                        {lastSig!.entryPrice.toLocaleString()} · {Math.round(lastSig!.signalStrength * 100)}% fuerza
+                        🕐 {formatSignalTime(lastSig!.timestamp)}
                       </div>
                     </div>
                   </div>
