@@ -4,7 +4,7 @@ import { useStore } from '@/store/useStore';
 
 const tabs = [
   { key: 'home', label: 'Home', Icon: Home },
-  { key: 'gold-analysis', label: 'Quant SP500', Icon: Zap },
+  { key: 'gold-analysis', label: 'Quant', Icon: Zap },
   { key: 'ai-brain', label: 'AI Brain', Icon: Brain },
   { key: 'analyze', label: 'Analyze', Icon: Camera },
   { key: 'markets', label: 'Markets', Icon: Atom },
