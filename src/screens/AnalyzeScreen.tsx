@@ -2,7 +2,7 @@ import { useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ImageIcon, Zap, Upload, TrendingUp, TrendingDown, Minus, Target, Shield, ChevronDown, ChevronUp, RefreshCw, Brain } from 'lucide-react';
 import { useStore } from '@/store/useStore';
-import { kimiVisionPost } from '@/lib/openai';
+import { kimiVisionPost, parseModelJSON } from '@/lib/openai';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -79,7 +79,9 @@ Responde ÚNICAMENTE en este JSON (sin texto adicional):
   try {
     const data = await kimiVisionPost(base64Image, prompt, 60000);
     if (!data?.choices?.[0]?.message?.content) throw new Error('Respuesta inválida');
-    return JSON.parse(data.choices[0].message.content);
+    
+    // Limpiar markdown si el modelo devuelve ```json ... ```
+    return parseModelJSON(data.choices[0].message.content);
 
   } catch (error: any) {
     if (error.code === 'ECONNABORTED') throw new Error('Timeout: imagen muy grande o conexión lenta. Intenta con una imagen más pequeña.');

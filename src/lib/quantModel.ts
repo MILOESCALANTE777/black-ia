@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { openaiPost } from './openai';
+import { openaiPost, parseModelJSON } from './openai';
 
 const TWELVE_KEY = import.meta.env.VITE_TWELVE_DATA_API_KEY;
 const OPENAI_KEY = import.meta.env.VITE_OPENAI_API_KEY;
@@ -579,7 +579,7 @@ Responde en JSON:
       max_tokens: 400,
       response_format: { type: 'json_object' },
     }, 25000);
-    return JSON.parse(data.choices[0].message.content);
+    return parseModelJSON(data.choices[0].message.content);
   } catch {
     return {
       summary: 'Modelo cuantitativo activo. Monitoreando anomalias en rendimientos logaritmicos con umbral ±2.5σ.',

@@ -4,6 +4,34 @@ const GROQ_KEY = import.meta.env.VITE_GROQ_API_KEY;
 const KIMI_KEY = import.meta.env.VITE_KIMI_API_KEY;
 
 /**
+ * Limpia la respuesta del modelo — algunos modelos devuelven ```json ... ```
+ * en lugar de JSON puro. Esta función extrae el JSON limpio.
+ */
+export function parseModelJSON(content: string): any {
+  // Remover markdown code blocks
+  let clean = content
+    .replace(/```json\s*/gi, '')
+    .replace(/```\s*/g, '')
+    .trim();
+  
+  // Si empieza con { o [ es JSON válido directo
+  if (clean.startsWith('{') || clean.startsWith('[')) {
+    return JSON.parse(clean);
+  }
+  
+  // Buscar el primer { o [ en el texto
+  const jsonStart = clean.search(/[{[]/);
+  if (jsonStart !== -1) {
+    const jsonEnd = Math.max(clean.lastIndexOf('}'), clean.lastIndexOf(']'));
+    if (jsonEnd !== -1) {
+      return JSON.parse(clean.substring(jsonStart, jsonEnd + 1));
+    }
+  }
+  
+  throw new Error('No se encontró JSON válido en la respuesta');
+}
+
+/**
  * GROQ — para chat, análisis de texto, noticias, quant (gratis)
  * Proxy: /api/openai → https://api.groq.com
  */

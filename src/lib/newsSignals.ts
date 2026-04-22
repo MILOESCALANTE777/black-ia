@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { openaiPost } from './openai';
+import { openaiPost, parseModelJSON } from './openai';
 
 const OPENAI_KEY = import.meta.env.VITE_OPENAI_API_KEY;
 const NEWS_KEY = import.meta.env.VITE_NEWS_API_KEY;
@@ -244,7 +244,7 @@ REGLAS CRÍTICAS:
       response_format: { type: 'json_object' },
     }, 45000);
 
-    const parsed = JSON.parse(data.choices[0].message.content);
+    const parsed = parseModelJSON(data.choices[0].message.content);
     return parsed.signals || [];
   } catch (error) {
     console.error('Error analyzing news with GPT:', error);

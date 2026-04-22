@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { openaiPost } from './openai';
+import { openaiPost, parseModelJSON } from './openai';
 
 const OPENAI_KEY = import.meta.env.VITE_OPENAI_API_KEY;
 const TWELVE_KEY = import.meta.env.VITE_TWELVE_DATA_API_KEY;
@@ -569,7 +569,7 @@ Responde SOLO este JSON:
       max_tokens: 600,
       response_format: { type: 'json_object' },
     }, 30000);
-    return JSON.parse(data.choices[0].message.content);
+    return parseModelJSON(data.choices[0].message.content);
   } catch {
     return { bias: 'neutral', strength: 50, reasoning: 'No se pudo conectar con la IA.', marketContext: 'Analisis no disponible.', fundamentalSummary: 'Analisis fundamental no disponible.' };
   }
