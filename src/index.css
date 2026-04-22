@@ -1,0 +1,165 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 0%;
+    --foreground: 0 0% 100%;
+    --card: 0 0% 11%;
+    --card-foreground: 0 0% 100%;
+    --popover: 0 0% 11%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 0 0% 100%;
+    --primary-foreground: 0 0% 0%;
+    --secondary: 0 0% 11%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 0 0% 11%;
+    --muted-foreground: 0 0% 56%;
+    --accent: 0 0% 17%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 22%;
+    --input: 0 0% 11%;
+    --ring: 0 0% 100%;
+    --radius: 0.75rem;
+
+    --bg-primary: #000000;
+    --bg-card: #1C1C1E;
+    --bg-card-elevated: #2C2C2E;
+    --bg-input: #1C1C1E;
+    --bg-button: #FFFFFF;
+    --text-primary: #FFFFFF;
+    --text-secondary: #8E8E93;
+    --text-muted: #636366;
+    --accent-green: #34C759;
+    --accent-red: #FF3B30;
+    --accent-orange: #FF9500;
+    --accent-blue: #007AFF;
+    --accent-purple: #AF52DE;
+    --border-subtle: #38383A;
+  }
+
+  * {
+    @apply border-border;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-black text-white;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    overscroll-behavior-y: none;
+    min-height: 100dvh;
+  }
+
+  html {
+    overscroll-behavior-y: none;
+    height: 100%;
+  }
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .text-gradient {
+    background: linear-gradient(135deg, #FFFFFF 0%, #8E8E93 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
+@keyframes bounce-dots {
+  0%, 80%, 100% { transform: scale(0); }
+  40% { transform: scale(1); }
+}
+
+@keyframes pulse-glow {
+  0% { box-shadow: 0 0 0 0 rgba(175, 82, 222, 0.4); }
+  70% { box-shadow: 0 0 0 12px rgba(175, 82, 222, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(175, 82, 222, 0); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slide-in-right {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes draw-circle {
+  from { stroke-dashoffset: 283; }
+  to { stroke-dashoffset: 0; }
+}
+
+.animate-bounce-dots {
+  animation: bounce-dots 1.4s infinite ease-in-out both;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s infinite;
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, #1C1C1E 0%, #2C2C2E 50%, #1C1C1E 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.5s ease-out forwards;
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.35s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+
+.animate-scale-in {
+  animation: scale-in 0.3s ease-out forwards;
+}
