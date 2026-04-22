@@ -1,7 +1,64 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { TrendingUp, TrendingDown, RefreshCw, Clock, Zap, AlertTriangle, ChevronDown, ChevronUp, Activity, BarChart2, Trash2, History } from 'lucide-react';
+import { TrendingUp, TrendingDown, RefreshCw, Clock, Zap, AlertTriangle, ChevronDown, ChevronUp, Activity, BarChart2, Trash2, History, CheckCircle, XCircle, Timer } from 'lucide-react';
 import { runQuantAnalysis, type QuantAnalysis, type LogAnomalySignal, type NewsImpact, loadSignalHistory, clearSignalHistory, type StoredSignal } from '@/lib/quantModel';
+
+// ─── Signal status logic ──────────────────────────────────────────────────────
+// Determines if a signal is ACTIVE, TP_HIT, SL_HIT, or EXPIRED based on current price
+
+type SignalStatus = 'ACTIVE' | 'TP_HIT' | 'SL_HIT' | 'EXPIRED' | 'PENDING';
+
+function getSignalStatus(sig: LogAnomalySignal, currentPrice: number): SignalStatus {
+  if (sig.direction === 'NONE') return 'EXPIRED';
+  if (!currentPrice || currentPrice <= 0) return 'PENDING';
+
+  const { direction, entryPrice, stopLoss, takeProfit } = sig;
+
+  if (direction === 'LONG') {
+    if (currentPrice >= takeProfit) return 'TP_HIT';
+    if (currentPrice <= stopLoss) return 'SL_HIT';
+    // Active if price is between SL and TP and hasn't moved too far from entry
+    if (currentPrice > stopLoss && currentPrice < takeProfit) return 'ACTIVE';
+  }
+  if (direction === 'SHORT') {
+    if (currentPrice <= takeProfit) return 'TP_HIT';
+    if (currentPrice >= stopLoss) return 'SL_HIT';
+    if (currentPrice < stopLoss && currentPrice > takeProfit) return 'ACTIVE';
+  }
+  return 'EXPIRED';
+}
+
+function StatusBadge({ status }: { status: SignalStatus }) {
+  const config = {
+    ACTIVE:  { label: '● ACTIVA',   color: '#34C759', bg: '#34C75920', pulse: true  },
+    TP_HIT:  { label: '✓ TP',       color: '#34C759', bg: '#34C75915', pulse: false },
+    SL_HIT:  { label: '✗ SL',       color: '#FF3B30', bg: '#FF3B3015', pulse: false },
+    EXPIRED: { label: 'CERRADA',    color: '#636366', bg: '#2C2C2E',   pulse: false },
+    PENDING: { label: 'PENDIENTE',  color: '#FF9500', bg: '#FF950015', pulse: false },
+  }[status];
+
+  return (
+    <span className="flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full"
+      style={{ color: config.color, background: config.bg }}>
+      {config.pulse && <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: config.color }} />}
+      {config.label}
+    </span>
+  );
+}
+
+// ─── Countdown hook ───────────────────────────────────────────────────────────
+
+function useCountdown(targetSeconds: number) {
+  const [secs, setSecs] = useState(targetSeconds);
+  useEffect(() => {
+    setSecs(targetSeconds);
+    const t = setInterval(() => setSecs(s => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(t);
+  }, [targetSeconds]);
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
 
 const QUANT_ASSETS = [
   { symbol: 'SPX',     name: 'S&P 500',    color: '#007AFF' },
@@ -38,26 +95,37 @@ function ZScoreBar({ zScore, threshold = 2.5 }: { zScore: number; threshold?: nu
   );
 }
 
-function SignalRow({ sig, isLatest, isHistorical }: { sig: LogAnomalySignal; isLatest?: boolean; isHistorical?: boolean }) {
+function SignalRow({ sig, isLatest, isHistorical, currentPrice }: { sig: LogAnomalySignal; isLatest?: boolean; isHistorical?: boolean; currentPrice?: number }) {
   const [open, setOpen] = useState(isLatest || false);
   const dirColor = sig.direction === 'LONG' ? '#34C759' : sig.direction === 'SHORT' ? '#FF3B30' : '#636366';
   const strengthPct = Math.round(sig.signalStrength * 100);
+  const status = currentPrice ? getSignalStatus(sig, currentPrice) : 'PENDING';
+  const isActive = status === 'ACTIVE';
 
   return (
     <div className="rounded-2xl overflow-hidden cursor-pointer"
-      style={{ background: isHistorical ? '#161616' : '#1C1C1E', border: `1px solid ${isLatest ? dirColor + '50' : isHistorical ? '#2C2C2E' : '#38383A'}`, opacity: isHistorical ? 0.85 : 1 }}
+      style={{
+        background: isHistorical ? '#161616' : '#1C1C1E',
+        border: `1px solid ${isActive ? dirColor + '60' : isLatest ? dirColor + '40' : isHistorical ? '#2C2C2E' : '#38383A'}`,
+        opacity: (status === 'SL_HIT' || status === 'EXPIRED') && isHistorical ? 0.5 : 1,
+      }}
       onClick={() => setOpen(!open)}>
       <div className="flex items-center gap-3 px-4 py-3">
-        <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+        <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 relative"
           style={{ background: dirColor + '15' }}>
           {sig.direction === 'LONG' ? <TrendingUp size={16} color={dirColor} /> :
            sig.direction === 'SHORT' ? <TrendingDown size={16} color={dirColor} /> :
            <Activity size={16} color={dirColor} />}
+          {isActive && (
+            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full border-2 border-black animate-pulse"
+              style={{ background: dirColor }} />
+          )}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-sm font-bold" style={{ color: dirColor }}>{sig.direction}</span>
-            {isLatest && <span className="text-xs px-1.5 py-0.5 rounded font-bold" style={{ background: '#AF52DE20', color: '#AF52DE' }}>ULTIMA</span>}
+            <StatusBadge status={status} />
+            {isLatest && !isHistorical && <span className="text-xs px-1.5 py-0.5 rounded font-bold" style={{ background: '#AF52DE20', color: '#AF52DE' }}>ÚLTIMA</span>}
             {isHistorical && <span className="text-xs px-1.5 py-0.5 rounded font-bold" style={{ background: '#2C2C2E', color: '#636366' }}>HIST</span>}
             {sig.isSignificant99 && <span className="text-xs px-1.5 py-0.5 rounded font-bold" style={{ background: '#34C75920', color: '#34C759' }}>99%</span>}
             {sig.isSignificant && !sig.isSignificant99 && <span className="text-xs px-1.5 py-0.5 rounded font-bold" style={{ background: '#FF950020', color: '#FF9500' }}>95%</span>}
@@ -76,6 +144,30 @@ function SignalRow({ sig, isLatest, isHistorical }: { sig: LogAnomalySignal; isL
             exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }}>
             <div className="px-4 pb-4 border-t border-[#38383A] pt-3 space-y-3">
               <ZScoreBar zScore={sig.zScore} />
+              {/* Price progress bar vs entry */}
+              {currentPrice && sig.direction !== 'NONE' && (
+                <div>
+                  <div className="flex justify-between text-xs text-[#636366] mb-1">
+                    <span>SL {sig.stopLoss.toLocaleString()}</span>
+                    <span className="font-bold" style={{ color: isActive ? dirColor : '#636366' }}>
+                      Precio actual: {currentPrice.toLocaleString()}
+                    </span>
+                    <span>TP {sig.takeProfit.toLocaleString()}</span>
+                  </div>
+                  <div className="h-2 rounded-full overflow-hidden" style={{ background: '#2C2C2E' }}>
+                    {(() => {
+                      const range = Math.abs(sig.takeProfit - sig.stopLoss);
+                      const pos = sig.direction === 'LONG'
+                        ? Math.min(100, Math.max(0, ((currentPrice - sig.stopLoss) / range) * 100))
+                        : Math.min(100, Math.max(0, ((sig.stopLoss - currentPrice) / range) * 100));
+                      return (
+                        <div className="h-full rounded-full transition-all duration-500"
+                          style={{ width: `${pos}%`, background: status === 'TP_HIT' ? '#34C759' : status === 'SL_HIT' ? '#FF3B30' : dirColor }} />
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div className="p-2 rounded-xl" style={{ background: '#2C2C2E' }}>
                   <span className="text-[#636366] block mb-0.5">Log Return</span>
@@ -159,7 +251,11 @@ export default function QuantScreen() {
   const [activeTab, setActiveTab] = useState<'signals' | 'news' | 'metrics'>('signals');
   const [signalHistory, setSignalHistory] = useState<StoredSignal[]>([]);
   const [showHistory, setShowHistory] = useState(true);
+  const [nextRefreshIn, setNextRefreshIn] = useState(900); // 15 min = 900 sec
   const schedulerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const countdown = useCountdown(nextRefreshIn);
 
   const refreshHistory = useCallback((sym: string) => {
     setSignalHistory(loadSignalHistory(sym));
@@ -172,6 +268,7 @@ export default function QuantScreen() {
       const result = await runQuantAnalysis(sym);
       setAnalysis(result);
       refreshHistory(sym);
+      setNextRefreshIn(900); // reset countdown
     } catch (e) {
       setError('Error al ejecutar el modelo. Verifica tu conexion.');
       console.error(e);
@@ -180,26 +277,25 @@ export default function QuantScreen() {
     }
   }, [refreshHistory]);
 
-  // Scheduler: check every minute if it's 9:29 NY -> pre-load data, 9:30 -> run signals
+  // Auto-refresh every 15 minutes
   useEffect(() => {
     load(symbol);
     refreshHistory(symbol);
 
-    const tick = () => {
-      const now = new Date();
-      const nyStr = now.toLocaleString('en-US', { timeZone: 'America/New_York' });
-      const nyDate = new Date(nyStr);
-      const h = nyDate.getHours();
-      const m = nyDate.getMinutes();
-      if ((h === 9 && m === 29) || (h === 9 && m === 30)) {
-        load(symbol);
-      } else if (h >= 9 && h < 16 && m % 15 === 0) {
-        load(symbol);
-      }
-    };
+    // Countdown timer
+    countdownRef.current = setInterval(() => {
+      setNextRefreshIn(prev => {
+        if (prev <= 1) {
+          load(symbol);
+          return 900;
+        }
+        return prev - 1;
+      });
+    }, 1000);
 
-    schedulerRef.current = setInterval(tick, 60000);
-    return () => { if (schedulerRef.current) clearInterval(schedulerRef.current); };
+    return () => {
+      if (countdownRef.current) clearInterval(countdownRef.current);
+    };
   }, [symbol, load, refreshHistory]);
 
   const handleSymbolChange = (sym: string) => {
@@ -207,12 +303,18 @@ export default function QuantScreen() {
     setShowPicker(false);
     setAnalysis(null);
     setSignalHistory([]);
+    setNextRefreshIn(900);
     load(sym);
   };
 
   const handleClearHistory = () => {
     clearSignalHistory(symbol);
     setSignalHistory([]);
+  };
+
+  const handleManualRefresh = () => {
+    setNextRefreshIn(900);
+    load(symbol);
   };
 
   const asset = QUANT_ASSETS.find(a => a.symbol === symbol) || QUANT_ASSETS[0];
@@ -258,7 +360,12 @@ export default function QuantScreen() {
                 <span className="text-[#38383A] ml-1">{analysis.nyTime} NY</span>
               </div>
             )}
-            <button onClick={() => load(symbol)} disabled={loading}
+            {/* Auto-refresh countdown */}
+            <div className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-mono" style={{ background: '#1C1C1E', border: '1px solid #38383A' }}>
+              <Timer size={11} color="#FF9500" />
+              <span className="text-[#FF9500] font-bold">{countdown}</span>
+            </div>
+            <button onClick={handleManualRefresh} disabled={loading}
               className="w-9 h-9 rounded-full flex items-center justify-center"
               style={{ background: '#1C1C1E', border: '1px solid #38383A' }}>
               <RefreshCw size={15} color="#8E8E93" className={loading ? 'animate-spin' : ''} />
@@ -398,7 +505,7 @@ export default function QuantScreen() {
                       </span>
                     </div>
                     {[...analysis.signals].sort((a, b) => b.timestamp.localeCompare(a.timestamp)).slice(0, 15).map((sig, i) => (
-                      <SignalRow key={sig.timestamp + i} sig={sig} isLatest={i === 0} />
+                      <SignalRow key={sig.timestamp + i} sig={sig} isLatest={i === 0} currentPrice={analysis.currentPrice} />
                     ))}
                   </>
                 )}
@@ -446,7 +553,7 @@ export default function QuantScreen() {
                           className="space-y-2"
                         >
                           {signalHistory.slice(0, 50).map((sig, i) => (
-                            <SignalRow key={sig.timestamp + sig.symbol + i} sig={sig} isLatest={false} isHistorical />
+                            <SignalRow key={sig.timestamp + sig.symbol + i} sig={sig} isLatest={false} isHistorical currentPrice={analysis.currentPrice} />
                           ))}
                           {signalHistory.length > 50 && (
                             <p className="text-xs text-[#38383A] text-center py-2">
