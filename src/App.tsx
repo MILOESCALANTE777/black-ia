@@ -21,6 +21,7 @@ import SLTPDetailScreen from '@/screens/SLTPDetailScreen';
 import JournalScreen from '@/screens/JournalScreen';
 import ReviewPromptScreen from '@/screens/ReviewPromptScreen';
 import GoldAnalysisScreen from '@/screens/QuantScreen';
+import NewsSignalsScreen from '@/screens/NewsSignalsScreen';
 
 const TAB_ROOT_SCREENS = [
   'HomeScreen',
@@ -29,6 +30,7 @@ const TAB_ROOT_SCREENS = [
   'MarketsScreen',
   'ProfileScreen',
   'GoldAnalysisScreen',
+  'NewsSignalsScreen',
 ];
 
 const ONBOARDING_SCREENS = [
@@ -66,6 +68,7 @@ function ScreenRouter() {
       case 'SLTPDetailScreen': return <SLTPDetailScreen />;
       case 'JournalScreen': return <JournalScreen />;
       case 'GoldAnalysisScreen': return <GoldAnalysisScreen />;
+      case 'NewsSignalsScreen': return <NewsSignalsScreen />;
       default: return <HomeScreen />;
     }
   };

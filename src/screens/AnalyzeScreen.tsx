@@ -41,6 +41,11 @@ interface VisionAnalysis {
 // ─── GPT-4o Vision call ───────────────────────────────────────────────────────
 
 async function analyzeChartImage(base64Image: string, symbol: string): Promise<VisionAnalysis> {
+  // Verificar que la API key esté configurada
+  if (!OPENAI_KEY || OPENAI_KEY === 'undefined') {
+    throw new Error('API key de OpenAI no configurada. Verifica tu archivo .env');
+  }
+
   const prompt = `Eres un analista técnico experto de nivel institucional. Analiza esta imagen de gráfico de trading con MÁXIMO detalle.
 
 ACTIVO: ${symbol || 'Desconocido'}
@@ -104,24 +109,75 @@ Responde ÚNICAMENTE en este JSON exacto (sin texto adicional):
   "recommendation": "Recomendación concreta: qué hacer AHORA, con qué estrategia y por qué"
 }`;
 
-  const res = await axios.post('/api/openai/v1/chat/completions', {
-    model: 'gpt-4o',
-    messages: [{
-      role: 'user',
-      content: [
-        { type: 'text', text: prompt },
-        { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64Image}`, detail: 'high' } },
-      ],
-    }],
-    temperature: 0.2,
-    max_tokens: 2000,
-    response_format: { type: 'json_object' },
-  }, {
-    headers: { Authorization: `Bearer ${OPENAI_KEY}`, 'Content-Type': 'application/json' },
-    timeout: 45000,
-  });
+  try {
+    console.log('🔍 Iniciando análisis de imagen...');
+    console.log('📊 Activo:', symbol || 'Desconocido');
+    console.log('🔑 API Key configurada:', OPENAI_KEY ? 'Sí' : 'No');
+    
+    const res = await axios.post('/api/openai/v1/chat/completions', {
+      model: 'gpt-4o',
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'text', text: prompt },
+          { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64Image}`, detail: 'high' } },
+        ],
+      }],
+      temperature: 0.2,
+      max_tokens: 2000,
+      response_format: { type: 'json_object' },
+    }, {
+      headers: { 
+        'Authorization': `Bearer ${OPENAI_KEY}`, 
+        'Content-Type': 'application/json' 
+      },
+      timeout: 60000, // Aumentado a 60 segundos
+    });
 
-  return JSON.parse(res.data.choices[0].message.content);
+    console.log('✅ Respuesta recibida de OpenAI');
+    
+    if (!res.data?.choices?.[0]?.message?.content) {
+      throw new Error('Respuesta inválida de OpenAI');
+    }
+
+    const parsed = JSON.parse(res.data.choices[0].message.content);
+    console.log('✅ Análisis completado exitosamente');
+    
+    return parsed;
+  } catch (error: any) {
+    console.error('❌ Error en análisis de imagen:', error);
+    
+    // Mensajes de error más específicos
+    if (error.code === 'ECONNABORTED') {
+      throw new Error('Timeout: La imagen es muy grande o la conexión es lenta. Intenta con una imagen más pequeña.');
+    }
+    
+    if (error.response) {
+      const status = error.response.status;
+      const data = error.response.data;
+      
+      console.error('📛 Status:', status);
+      console.error('📛 Data:', data);
+      
+      if (status === 401) {
+        throw new Error('API key inválida. Verifica tu configuración en el archivo .env');
+      } else if (status === 429) {
+        throw new Error('Límite de rate excedido. Espera unos minutos e intenta de nuevo.');
+      } else if (status === 400) {
+        throw new Error('Imagen inválida o muy grande. Intenta con otra imagen (máx 20MB).');
+      } else if (status === 500 || status === 502 || status === 503) {
+        throw new Error('Error del servidor de OpenAI. Intenta de nuevo en unos momentos.');
+      }
+      
+      throw new Error(`Error ${status}: ${data?.error?.message || 'Error desconocido'}`);
+    }
+    
+    if (error.request) {
+      throw new Error('No se pudo conectar con OpenAI. Verifica tu conexión a internet.');
+    }
+    
+    throw new Error(error.message || 'Error desconocido al analizar la imagen');
+  }
 }
 
 // ─── Result sub-components ────────────────────────────────────────────────────
@@ -350,15 +406,25 @@ export default function AnalyzeScreen() {
   const handleGalleryClick = () => fileInputRef.current?.click();
 
   const handleAnalyze = async () => {
-    if (!base64Image) return;
+    if (!base64Image) {
+      setError('No hay imagen para analizar. Por favor, sube una imagen primero.');
+      return;
+    }
+    
     setIsAnalyzing(true);
     setError(null);
+    
     try {
+      console.log('🚀 Iniciando análisis...');
       const result = await analyzeChartImage(base64Image, symbol);
+      console.log('✅ Análisis completado:', result);
       setAnalysisResult(result);
-    } catch (err) {
-      console.error(err);
-      setError('Error al analizar la imagen. Verifica tu conexión y vuelve a intentarlo.');
+    } catch (err: any) {
+      console.error('❌ Error capturado en handleAnalyze:', err);
+      
+      // Usar el mensaje de error específico si está disponible
+      const errorMessage = err.message || 'Error al analizar la imagen. Verifica tu conexión y vuelve a intentarlo.';
+      setError(errorMessage);
     } finally {
       setIsAnalyzing(false);
     }
@@ -525,9 +591,50 @@ export default function AnalyzeScreen() {
           )}
 
           {error && (
-            <div className="p-3 rounded-xl text-xs text-[#FF3B30] leading-relaxed" style={{ background: 'rgba(255,59,48,0.1)', border: '1px solid rgba(255,59,48,0.2)' }}>
-              {error}
-            </div>
+            <motion.div 
+              initial={{ opacity: 0, y: -10 }} 
+              animate={{ opacity: 1, y: 0 }}
+              className="p-4 rounded-xl" 
+              style={{ background: 'rgba(255,59,48,0.1)', border: '1px solid rgba(255,59,48,0.3)' }}
+            >
+              <div className="flex items-start gap-2">
+                <span className="text-[#FF3B30] text-lg">⚠️</span>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-[#FF3B30] mb-1">Error al analizar</p>
+                  <p className="text-xs text-[#FF3B30] leading-relaxed">{error}</p>
+                  
+                  {/* Sugerencias de solución */}
+                  <div className="mt-3 pt-3 border-t border-[#FF3B3030]">
+                    <p className="text-xs font-semibold text-[#FF3B30] mb-2">Posibles soluciones:</p>
+                    <ul className="space-y-1">
+                      <li className="text-xs text-[#8E8E93] flex items-start gap-1.5">
+                        <span className="text-[#FF3B30] mt-0.5">•</span>
+                        <span>Verifica que tu API key de OpenAI esté configurada en el archivo .env</span>
+                      </li>
+                      <li className="text-xs text-[#8E8E93] flex items-start gap-1.5">
+                        <span className="text-[#FF3B30] mt-0.5">•</span>
+                        <span>Asegúrate de tener conexión a internet estable</span>
+                      </li>
+                      <li className="text-xs text-[#8E8E93] flex items-start gap-1.5">
+                        <span className="text-[#FF3B30] mt-0.5">•</span>
+                        <span>Intenta con una imagen más pequeña (máx 5MB)</span>
+                      </li>
+                      <li className="text-xs text-[#8E8E93] flex items-start gap-1.5">
+                        <span className="text-[#FF3B30] mt-0.5">•</span>
+                        <span>Verifica que la imagen sea un gráfico de trading válido</span>
+                      </li>
+                    </ul>
+                  </div>
+                  
+                  <button
+                    onClick={() => setError(null)}
+                    className="mt-3 text-xs font-medium text-[#FF3B30] underline"
+                  >
+                    Cerrar
+                  </button>
+                </div>
+              </div>
+            </motion.div>
           )}
 
           {/* What it detects */}

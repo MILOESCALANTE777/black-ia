@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, X, TrendingUp, TrendingDown, RefreshCw, Clock, Zap, ChevronDown, ChevronUp, Target, Shield, Activity, BarChart2 } from 'lucide-react';
+import { Search, X, TrendingUp, TrendingDown, RefreshCw, Clock, Zap, ChevronDown, ChevronUp, Target, Shield, Activity, BarChart2, Newspaper } from 'lucide-react';
 import { runQuantAnalysis, type QuantAnalysis, type LogAnomalySignal, runLogAnomalyModel, fetchQuantCandles } from '@/lib/quantModel';
 import axios from 'axios';
 import { analyzeAsset, type UniversalAnalysis, type TimeframeSignal, ASSET_CATALOG } from '@/lib/universalAnalysis';
+import { useStore } from '@/store/useStore';
 
 const TWELVE_KEY = import.meta.env.VITE_TWELVE_DATA_API_KEY;
 const OPENAI_KEY = import.meta.env.VITE_OPENAI_API_KEY;
@@ -985,6 +986,7 @@ function AssetDetailPanel({ asset, onClose }: { asset: MarketItem; onClose: () =
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function MarketsScreen() {
+  const navigate = useStore((s) => s.navigate);
   const [activeCategory, setActiveCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAsset, setSelectedAsset] = useState<MarketItem | null>(null);
@@ -1001,7 +1003,17 @@ export default function MarketsScreen() {
       <div className={`flex flex-col ${selectedAsset ? 'hidden md:flex md:w-72 shrink-0' : 'flex-1'}`}>
         <div className="shrink-0 px-5 py-4"
           style={{ background: 'rgba(0,0,0,0.9)', backdropFilter: 'blur(20px)', borderBottom: '1px solid #1C1C1E' }}>
-          <h3 className="text-xl font-bold text-white mb-3">Markets</h3>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xl font-bold text-white">Markets</h3>
+            <button
+              onClick={() => navigate('NewsSignalsScreen')}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all"
+              style={{ background: '#007AFF', color: '#FFFFFF' }}
+            >
+              <Newspaper size={14} />
+              <span>Señales de Noticias</span>
+            </button>
+          </div>
           <div className="flex items-center bg-[#1C1C1E] rounded-xl px-3 py-2.5 border border-[#38383A] mb-3">
             <Search size={15} color="#8E8E93" />
             <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
