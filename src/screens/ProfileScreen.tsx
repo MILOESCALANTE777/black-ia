@@ -69,12 +69,17 @@ export default function ProfileScreen() {
 
   const handleDeleteAll = async () => {
     if (!user) return;
+    setConfirmDeleteAll(false); // cerrar confirmación inmediatamente
     try {
       await deleteAllAnalysis(user.id);
       setHistory([]);
       setUser({ ...user, total_analyses: 0 });
-      setConfirmDeleteAll(false);
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+      // Aunque falle en Supabase, limpiar el estado local
+      setHistory([]);
+      setUser({ ...user, total_analyses: 0 });
+    }
   };
 
   const handleSignOut = async () => {
@@ -229,7 +234,7 @@ export default function ProfileScreen() {
                   exit={{ opacity: 0, height: 0 }} className="mb-4 overflow-hidden">
 
                   {/* Header con borrar todo */}
-                  {history.length > 0 && (
+                  {(history.length > 0 || confirmDeleteAll) && (
                     <div className="flex items-center justify-between mb-2 px-1">
                       <span className="text-xs font-bold uppercase tracking-wider" style={{ color: textSecondary }}>
                         {history.length} análisis
