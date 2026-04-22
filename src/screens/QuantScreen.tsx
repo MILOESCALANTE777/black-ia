@@ -4,15 +4,13 @@ import { TrendingUp, TrendingDown, RefreshCw, Clock, Zap, AlertTriangle, Chevron
 import { runQuantAnalysis, type QuantAnalysis, type LogAnomalySignal, type NewsImpact, loadSignalHistory, clearSignalHistory, type StoredSignal } from '@/lib/quantModel';
 
 const QUANT_ASSETS = [
-  { symbol: 'SPX',     name: 'S&P 500',    color: '#007AFF' },
-  { symbol: 'DJI',     name: 'Dow Jones',  color: '#34C759' },
-  { symbol: 'NDX',     name: 'Nasdaq 100', color: '#AF52DE' },
   { symbol: 'XAU/USD', name: 'Oro',        color: '#FF9500' },
-  { symbol: 'BTC/USD', name: 'Bitcoin',    color: '#FF9500' },
-  { symbol: 'ETH/USD', name: 'Ethereum',   color: '#636366' },
+  { symbol: 'BTC/USD', name: 'Bitcoin',    color: '#F7931A' },
+  { symbol: 'ETH/USD', name: 'Ethereum',   color: '#627EEA' },
   { symbol: 'EUR/USD', name: 'EUR/USD',    color: '#34C759' },
-  { symbol: 'AAPL',    name: 'Apple',      color: '#8E8E93' },
-  { symbol: 'NVDA',    name: 'NVIDIA',     color: '#34C759' },
+  { symbol: 'GBP/USD', name: 'GBP/USD',   color: '#007AFF' },
+  { symbol: 'USD/JPY', name: 'USD/JPY',   color: '#AF52DE' },
+  { symbol: 'XAG/USD', name: 'Plata',      color: '#8E8E93' },
 ];
 
 function ZScoreBar({ zScore, threshold = 2.5 }: { zScore: number; threshold?: number }) {
@@ -154,7 +152,7 @@ export default function QuantScreen() {
   const [analysis, setAnalysis] = useState<QuantAnalysis | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [symbol, setSymbol] = useState('SPX');
+  const [symbol, setSymbol] = useState('XAU/USD');
   const [showPicker, setShowPicker] = useState(false);
   const [activeTab, setActiveTab] = useState<'signals' | 'news' | 'metrics'>('signals');
   const [signalHistory, setSignalHistory] = useState<StoredSignal[]>([]);

@@ -269,7 +269,11 @@ async function fetchCurrentPrice(symbol: string): Promise<{ price: number; chang
     if (price > 0) return { price, change, pct };
     throw new Error('invalid');
   } catch {
-    const fallbacks: Record<string, number> = { 'SPX': 7100, 'DJI': 39800, 'NDX': 18200, 'XAU/USD': 3320, 'BTC/USD': 67000 };
+    const fallbacks: Record<string, number> = {
+      'XAU/USD': 3320, 'BTC/USD': 94000, 'ETH/USD': 1800,
+      'EUR/USD': 1.135, 'GBP/USD': 1.328, 'USD/JPY': 142.5,
+      'XAG/USD': 32.5,
+    };
     return { price: fallbacks[symbol] || 100, change: 0, pct: 0 };
   }
 }
@@ -518,9 +522,9 @@ Responde en JSON:
 
 export async function runQuantAnalysis(symbol = 'SPX'): Promise<QuantAnalysis> {
   const assetNames: Record<string, string> = {
-    'SPX': 'S&P 500', 'DJI': 'Dow Jones', 'NDX': 'Nasdaq 100',
     'XAU/USD': 'Oro', 'BTC/USD': 'Bitcoin', 'ETH/USD': 'Ethereum',
-    'EUR/USD': 'EUR/USD', 'GBP/USD': 'GBP/USD', 'AAPL': 'Apple', 'NVDA': 'NVIDIA',
+    'EUR/USD': 'Euro / Dólar', 'GBP/USD': 'Libra / Dólar', 'USD/JPY': 'Dólar / Yen',
+    'XAG/USD': 'Plata',
   };
   const assetName = assetNames[symbol] || symbol;
 
