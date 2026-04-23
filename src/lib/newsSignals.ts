@@ -90,17 +90,26 @@ async function fetchRecentNews(query: string): Promise<any[]> {
 
     if (!res.data?.articles?.length) return [];
 
-    // Filter last 24 hours only
+    // Filtrar últimas 72 horas (plan gratuito de NewsAPI tiene delay)
     const now = Date.now();
-    const oneDayAgo = now - 24 * 60 * 60 * 1000;
+    const threeDaysAgo = now - 72 * 60 * 60 * 1000;
 
-    return res.data.articles
+    const filtered = res.data.articles
       .filter((a: any) => {
         if (!a.title || !a.publishedAt) return false;
         const pubTime = new Date(a.publishedAt).getTime();
-        return pubTime >= oneDayAgo;
+        return pubTime >= threeDaysAgo;
       })
       .slice(0, 15);
+
+    // Si no hay noticias en 72h, usar las más recientes disponibles (hasta 10)
+    if (filtered.length === 0) {
+      return res.data.articles
+        .filter((a: any) => a.title && a.publishedAt)
+        .slice(0, 10);
+    }
+
+    return filtered;
   } catch (error) {
     console.error('Error fetching news:', error);
     return [];
@@ -241,7 +250,6 @@ REGLAS CRÍTICAS:
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.15,
       max_tokens: 3000,
-      response_format: { type: 'json_object' },
     }, 45000);
 
     const parsed = parseModelJSON(data.choices[0].message.content);

@@ -567,7 +567,6 @@ Responde SOLO este JSON:
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.2,
       max_tokens: 600,
-      response_format: { type: 'json_object' },
     }, 30000);
     return parseModelJSON(data.choices[0].message.content);
   } catch {

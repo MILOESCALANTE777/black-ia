@@ -609,7 +609,6 @@ Responde en JSON:
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.2,
       max_tokens: 400,
-      response_format: { type: 'json_object' },
     }, 25000);
     return parseModelJSON(data.choices[0].message.content);
   } catch {

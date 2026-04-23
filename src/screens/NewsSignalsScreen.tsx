@@ -535,7 +535,10 @@ export default function NewsSignalsScreen() {
               <div className="text-center py-12">
                 <Newspaper size={40} color="#38383A" className="mx-auto mb-3" />
                 <p className="text-sm text-[#636366]">
-                  No hay señales recientes para este activo
+                  No se encontraron señales de noticias recientes
+                </p>
+                <p className="text-xs text-[#38383A] mt-2 max-w-xs mx-auto">
+                  Las noticias pueden tardar hasta 72h en aparecer. Intenta con otro activo o vuelve más tarde.
                 </p>
               </div>
             ) : (
